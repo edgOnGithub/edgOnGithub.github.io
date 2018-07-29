@@ -13,7 +13,7 @@ In this post I replicate the findings of Mankiw, Romer and Weil's 'A Contributio
 
 MRW use data from the Real National Accounts collated by Summers and Heston - now known as the Penn World Table - as well as the World Bank's _World Tables_  and _World Development Report_ 1988.^[Ben S. Bernanke & Refet S. Gürkaynak, 2002. "Is Growth Exogenous? Taking Mankiw, Romer, and Weil Seriously," NBER Chapters,in: NBER Macroeconomics Annual 2001, Volume 16, pages 11-72 National Bureau of Economic Research, Inc.] Unfortunately, the PWT 4.0, which MRW use, is no longer available online (the earliest version available is 5.6 but this has revised figures) however the advantage of replicating a paper written in 1992 is that all the data can be found tabulated in the appendix:
 
-![]({{ "/assets/appendix_subset.png" | absolute_url }})
+![](/assets/appendix_subset.png){:class="img-responsive"}
 
 Converting the data from an appendix pdf table into R requires the tabulizer library (and its dependency rJava):
 
