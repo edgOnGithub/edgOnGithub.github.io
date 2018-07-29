@@ -1,7 +1,7 @@
 ---
 layout: post
-author: 'Ed'
-title: 'MD'
+author: "Ed"
+title: "Empirics MD Three"
 ---
 In this post I finally solve the replication issues that plagued my last
 attempt. In hindsight, the naive addition of +5 to the
@@ -90,103 +90,234 @@ defined previously:
                                                'OECD 1',
                                                'OECD 2'))
 
-    knitr::kable(head(re_parametrisation_results, 10))
+    knitr::kable(head(re_parametrisation_results, 10), format = 'html')
 
 <table>
 <thead>
-<tr class="header">
-<th align="left">term</th>
-<th align="right">estimate</th>
-<th align="right">std.error</th>
-<th align="right">statistic</th>
-<th align="right">p.value</th>
-<th align="left">subset</th>
+<tr>
+<th style="text-align:left;">
+term
+</th>
+<th style="text-align:right;">
+estimate
+</th>
+<th style="text-align:right;">
+std.error
+</th>
+<th style="text-align:right;">
+statistic
+</th>
+<th style="text-align:right;">
+p.value
+</th>
+<th style="text-align:left;">
+subset
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="left">(Intercept)</td>
-<td align="right">8.0353051</td>
-<td align="right">1.2789285</td>
-<td align="right">6.282841</td>
-<td align="right">0.0000000</td>
-<td align="left">Non-Oil 0</td>
+<tr>
+<td style="text-align:left;">
+(Intercept)
+</td>
+<td style="text-align:right;">
+8.0353051
+</td>
+<td style="text-align:right;">
+1.2789285
+</td>
+<td style="text-align:right;">
+6.282841
+</td>
+<td style="text-align:right;">
+0.0000000
+</td>
+<td style="text-align:left;">
+Non-Oil 0
+</td>
 </tr>
-<tr class="even">
-<td align="left">log(s)</td>
-<td align="right">1.4240143</td>
-<td align="right">0.1431058</td>
-<td align="right">9.950779</td>
-<td align="right">0.0000000</td>
-<td align="left">Non-Oil 0</td>
+<tr>
+<td style="text-align:left;">
+log(s)
+</td>
+<td style="text-align:right;">
+1.4240143
+</td>
+<td style="text-align:right;">
+0.1431058
+</td>
+<td style="text-align:right;">
+9.950779
+</td>
+<td style="text-align:right;">
+0.0000000
+</td>
+<td style="text-align:left;">
+Non-Oil 0
+</td>
 </tr>
-<tr class="odd">
-<td align="left">log(n_g_d)</td>
-<td align="right">-1.9897745</td>
-<td align="right">0.5633619</td>
-<td align="right">-3.531965</td>
-<td align="right">0.0006385</td>
-<td align="left">Non-Oil 0</td>
+<tr>
+<td style="text-align:left;">
+log(n\_g\_d)
+</td>
+<td style="text-align:right;">
+-1.9897745
+</td>
+<td style="text-align:right;">
+0.5633619
+</td>
+<td style="text-align:right;">
+-3.531965
+</td>
+<td style="text-align:right;">
+0.0006385
+</td>
+<td style="text-align:left;">
+Non-Oil 0
+</td>
 </tr>
-<tr class="even">
-<td align="left">(Intercept)</td>
-<td align="right">4.5889772</td>
-<td align="right">0.4321797</td>
-<td align="right">10.618216</td>
-<td align="right">0.0000000</td>
-<td align="left">Non-Oil 1</td>
+<tr>
+<td style="text-align:left;">
+(Intercept)
+</td>
+<td style="text-align:right;">
+4.5889772
+</td>
+<td style="text-align:right;">
+0.4321797
+</td>
+<td style="text-align:right;">
+10.618216
+</td>
+<td style="text-align:right;">
+0.0000000
+</td>
+<td style="text-align:left;">
+Non-Oil 1
+</td>
 </tr>
-<tr class="odd">
-<td align="left">log(s)</td>
-<td align="right">1.3881114</td>
-<td align="right">0.1415856</td>
-<td align="right">9.804042</td>
-<td align="right">0.0000000</td>
-<td align="left">Non-Oil 1</td>
+<tr>
+<td style="text-align:left;">
+log(s)
+</td>
+<td style="text-align:right;">
+1.3881114
+</td>
+<td style="text-align:right;">
+0.1415856
+</td>
+<td style="text-align:right;">
+9.804042
+</td>
+<td style="text-align:right;">
+0.0000000
+</td>
+<td style="text-align:left;">
+Non-Oil 1
+</td>
 </tr>
-<tr class="even">
-<td align="left">log(n_g_d)</td>
-<td align="right">-0.5300861</td>
-<td align="right">0.1297557</td>
-<td align="right">-4.085261</td>
-<td align="right">0.0000919</td>
-<td align="left">Non-Oil 1</td>
+<tr>
+<td style="text-align:left;">
+log(n\_g\_d)
+</td>
+<td style="text-align:right;">
+-0.5300861
+</td>
+<td style="text-align:right;">
+0.1297557
+</td>
+<td style="text-align:right;">
+-4.085261
+</td>
+<td style="text-align:right;">
+0.0000919
+</td>
+<td style="text-align:left;">
+Non-Oil 1
+</td>
 </tr>
-<tr class="odd">
-<td align="left">(Intercept)</td>
-<td align="right">5.4298831</td>
-<td align="right">1.5838899</td>
-<td align="right">3.428195</td>
-<td align="right">0.0009000</td>
-<td align="left">Non-Oil 2</td>
+<tr>
+<td style="text-align:left;">
+(Intercept)
+</td>
+<td style="text-align:right;">
+5.4298831
+</td>
+<td style="text-align:right;">
+1.5838899
+</td>
+<td style="text-align:right;">
+3.428195
+</td>
+<td style="text-align:right;">
+0.0009000
+</td>
+<td style="text-align:left;">
+Non-Oil 2
+</td>
 </tr>
-<tr class="even">
-<td align="left">log(s)</td>
-<td align="right">1.4240143</td>
-<td align="right">0.1431058</td>
-<td align="right">9.950779</td>
-<td align="right">0.0000000</td>
-<td align="left">Non-Oil 2</td>
+<tr>
+<td style="text-align:left;">
+log(s)
+</td>
+<td style="text-align:right;">
+1.4240143
+</td>
+<td style="text-align:right;">
+0.1431058
+</td>
+<td style="text-align:right;">
+9.950779
+</td>
+<td style="text-align:right;">
+0.0000000
+</td>
+<td style="text-align:left;">
+Non-Oil 2
+</td>
 </tr>
-<tr class="odd">
-<td align="left">log(n_g_d)</td>
-<td align="right">-1.9897745</td>
-<td align="right">0.5633619</td>
-<td align="right">-3.531965</td>
-<td align="right">0.0006385</td>
-<td align="left">Non-Oil 2</td>
+<tr>
+<td style="text-align:left;">
+log(n\_g\_d)
+</td>
+<td style="text-align:right;">
+-1.9897745
+</td>
+<td style="text-align:right;">
+0.5633619
+</td>
+<td style="text-align:right;">
+-3.531965
+</td>
+<td style="text-align:right;">
+0.0006385
+</td>
+<td style="text-align:left;">
+Non-Oil 2
+</td>
 </tr>
-<tr class="even">
-<td align="left">(Intercept)</td>
-<td align="right">8.5678580</td>
-<td align="right">1.3050540</td>
-<td align="right">6.565137</td>
-<td align="right">0.0000000</td>
-<td align="left">Intermediate 0</td>
+<tr>
+<td style="text-align:left;">
+(Intercept)
+</td>
+<td style="text-align:right;">
+8.5678580
+</td>
+<td style="text-align:right;">
+1.3050540
+</td>
+<td style="text-align:right;">
+6.565137
+</td>
+<td style="text-align:right;">
+0.0000000
+</td>
+<td style="text-align:left;">
+Intermediate 0
+</td>
 </tr>
 </tbody>
 </table>
-
 Now comparing the intercepts:
 
     library(tidyr)
