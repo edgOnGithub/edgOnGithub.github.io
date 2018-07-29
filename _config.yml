@@ -1,13 +1,13 @@
 # Site settings
-title:          Tale
-description:    "Minimal Jekyll theme for storytellers"
-url:            "https://chesterhow.github.io"
+title:          Econ Research Reproduced
+description:    "A site dedicated to re-exploring older papers in economics"
+url:            "https://edgongithub.github.io/"
 
 # Author
 author:
-  name:         Chester How
-  url:          https://chester.how
-  email:        chesterhow@gmail.com
+  name:         Ed Jee
+  url:          https://edgongithub.github.io/
+  email:        e.m.jee@lse.ac.uk
 
 # Build settings
 markdown:       kramdown
