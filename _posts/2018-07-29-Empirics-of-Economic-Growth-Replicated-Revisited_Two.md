@@ -1,7 +1,7 @@
 ---
 layout: post
-author: "Ed"
-title: "Empirics MD Three"
+author: 'Ed'
+title: 'MD Four'
 ---
 In this post I finally solve the replication issues that plagued my last
 attempt. In hindsight, the naive addition of +5 to the
@@ -392,128 +392,282 @@ Using the comparison function created last time:
 
 <table>
 <thead>
-<tr class="header">
-<th align="left">term</th>
-<th align="left">subset</th>
-<th align="right">estimate_replicated</th>
-<th align="right">estimate_original</th>
-<th align="right">diff</th>
-<th align="right">rounded_diff</th>
-<th align="right">pct_orig</th>
+<tr>
+<th style="text-align:left;">
+term
+</th>
+<th style="text-align:left;">
+subset
+</th>
+<th style="text-align:right;">
+estimate\_replicated
+</th>
+<th style="text-align:right;">
+estimate\_original
+</th>
+<th style="text-align:right;">
+diff
+</th>
+<th style="text-align:right;">
+rounded\_diff
+</th>
+<th style="text-align:right;">
+pct\_orig
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="left">(Intercept)</td>
-<td align="left">Non-Oil</td>
-<td align="right">5.4298831</td>
-<td align="right">5.48</td>
-<td align="right">0.0501169</td>
-<td align="right">0.05</td>
-<td align="right">0.9145420</td>
+<tr>
+<td style="text-align:left;">
+(Intercept)
+</td>
+<td style="text-align:left;">
+Non-Oil
+</td>
+<td style="text-align:right;">
+5.4298831
+</td>
+<td style="text-align:right;">
+5.48
+</td>
+<td style="text-align:right;">
+0.0501169
+</td>
+<td style="text-align:right;">
+0.05
+</td>
+<td style="text-align:right;">
+0.9145420
+</td>
 </tr>
-<tr class="even">
-<td align="left">(Intercept)</td>
-<td align="left">Intermediate</td>
-<td align="right">5.3458652</td>
-<td align="right">5.36</td>
-<td align="right">0.0141348</td>
-<td align="right">0.01</td>
-<td align="right">0.2637088</td>
+<tr>
+<td style="text-align:left;">
+(Intercept)
+</td>
+<td style="text-align:left;">
+Intermediate
+</td>
+<td style="text-align:right;">
+5.3458652
+</td>
+<td style="text-align:right;">
+5.36
+</td>
+<td style="text-align:right;">
+0.0141348
+</td>
+<td style="text-align:right;">
+0.01
+</td>
+<td style="text-align:right;">
+0.2637088
+</td>
 </tr>
-<tr class="odd">
-<td align="left">(Intercept)</td>
-<td align="left">OECD</td>
-<td align="right">8.0206068</td>
-<td align="right">7.97</td>
-<td align="right">-0.0506068</td>
-<td align="right">-0.05</td>
-<td align="right">-0.6349656</td>
+<tr>
+<td style="text-align:left;">
+(Intercept)
+</td>
+<td style="text-align:left;">
+OECD
+</td>
+<td style="text-align:right;">
+8.0206068
+</td>
+<td style="text-align:right;">
+7.97
+</td>
+<td style="text-align:right;">
+-0.0506068
+</td>
+<td style="text-align:right;">
+-0.05
+</td>
+<td style="text-align:right;">
+-0.6349656
+</td>
 </tr>
-<tr class="even">
-<td align="left">log(n_g_d)</td>
-<td align="left">Non-Oil</td>
-<td align="right">-1.9897745</td>
-<td align="right">-1.97</td>
-<td align="right">0.0197745</td>
-<td align="right">0.02</td>
-<td align="right">-1.0037809</td>
+<tr>
+<td style="text-align:left;">
+log(n\_g\_d)
+</td>
+<td style="text-align:left;">
+Non-Oil
+</td>
+<td style="text-align:right;">
+-1.9897745
+</td>
+<td style="text-align:right;">
+-1.97
+</td>
+<td style="text-align:right;">
+0.0197745
+</td>
+<td style="text-align:right;">
+0.02
+</td>
+<td style="text-align:right;">
+-1.0037809
+</td>
 </tr>
-<tr class="odd">
-<td align="left">log(n_g_d)</td>
-<td align="left">Intermediate</td>
-<td align="right">-2.0171995</td>
-<td align="right">-2.01</td>
-<td align="right">0.0071995</td>
-<td align="right">0.01</td>
-<td align="right">-0.3581838</td>
+<tr>
+<td style="text-align:left;">
+log(n\_g\_d)
+</td>
+<td style="text-align:left;">
+Intermediate
+</td>
+<td style="text-align:right;">
+-2.0171995
+</td>
+<td style="text-align:right;">
+-2.01
+</td>
+<td style="text-align:right;">
+0.0071995
+</td>
+<td style="text-align:right;">
+0.01
+</td>
+<td style="text-align:right;">
+-0.3581838
+</td>
 </tr>
-<tr class="even">
-<td align="left">log(n_g_d)</td>
-<td align="left">OECD</td>
-<td align="right">-0.7419215</td>
-<td align="right">-0.76</td>
-<td align="right">-0.0180785</td>
-<td align="right">-0.02</td>
-<td align="right">2.3787554</td>
+<tr>
+<td style="text-align:left;">
+log(n\_g\_d)
+</td>
+<td style="text-align:left;">
+OECD
+</td>
+<td style="text-align:right;">
+-0.7419215
+</td>
+<td style="text-align:right;">
+-0.76
+</td>
+<td style="text-align:right;">
+-0.0180785
+</td>
+<td style="text-align:right;">
+-0.02
+</td>
+<td style="text-align:right;">
+2.3787554
+</td>
 </tr>
-<tr class="odd">
-<td align="left">log(s)</td>
-<td align="left">Non-Oil</td>
-<td align="right">1.4240143</td>
-<td align="right">1.42</td>
-<td align="right">-0.0040143</td>
-<td align="right">0.00</td>
-<td align="right">-0.2826960</td>
+<tr>
+<td style="text-align:left;">
+log(s)
+</td>
+<td style="text-align:left;">
+Non-Oil
+</td>
+<td style="text-align:right;">
+1.4240143
+</td>
+<td style="text-align:right;">
+1.42
+</td>
+<td style="text-align:right;">
+-0.0040143
+</td>
+<td style="text-align:right;">
+0.00
+</td>
+<td style="text-align:right;">
+-0.2826960
+</td>
 </tr>
-<tr class="even">
-<td align="left">log(s)</td>
-<td align="left">Intermediate</td>
-<td align="right">1.3175527</td>
-<td align="right">1.31</td>
-<td align="right">-0.0075527</td>
-<td align="right">-0.01</td>
-<td align="right">-0.5765386</td>
+<tr>
+<td style="text-align:left;">
+log(s)
+</td>
+<td style="text-align:left;">
+Intermediate
+</td>
+<td style="text-align:right;">
+1.3175527
+</td>
+<td style="text-align:right;">
+1.31
+</td>
+<td style="text-align:right;">
+-0.0075527
+</td>
+<td style="text-align:right;">
+-0.01
+</td>
+<td style="text-align:right;">
+-0.5765386
+</td>
 </tr>
-<tr class="odd">
-<td align="left">log(s)</td>
-<td align="left">OECD</td>
-<td align="right">0.4998895</td>
-<td align="right">0.50</td>
-<td align="right">0.0001105</td>
-<td align="right">0.00</td>
-<td align="right">0.0220925</td>
+<tr>
+<td style="text-align:left;">
+log(s)
+</td>
+<td style="text-align:left;">
+OECD
+</td>
+<td style="text-align:right;">
+0.4998895
+</td>
+<td style="text-align:right;">
+0.50
+</td>
+<td style="text-align:right;">
+0.0001105
+</td>
+<td style="text-align:right;">
+0.00
+</td>
+<td style="text-align:right;">
+0.0220925
+</td>
 </tr>
 </tbody>
 </table>
-
     knitr::kable(re_param_comparison %>% 
                    group_by(term) %>% 
                    summarise(mean(diff)))
 
 <table>
 <thead>
-<tr class="header">
-<th align="left">term</th>
-<th align="right">mean(diff)</th>
+<tr>
+<th style="text-align:left;">
+term
+</th>
+<th style="text-align:right;">
+mean(diff)
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="left">(Intercept)</td>
-<td align="right">0.0045483</td>
+<tr>
+<td style="text-align:left;">
+(Intercept)
+</td>
+<td style="text-align:right;">
+0.0045483
+</td>
 </tr>
-<tr class="even">
-<td align="left">log(n_g_d)</td>
-<td align="right">0.0029651</td>
+<tr>
+<td style="text-align:left;">
+log(n\_g\_d)
+</td>
+<td style="text-align:right;">
+0.0029651
+</td>
 </tr>
-<tr class="odd">
-<td align="left">log(s)</td>
-<td align="right">-0.0038188</td>
+<tr>
+<td style="text-align:left;">
+log(s)
+</td>
+<td style="text-align:right;">
+-0.0038188
+</td>
 </tr>
 </tbody>
 </table>
-
 There's pretty conclusive evidence that my first argument was in fact
 correct and not my second, favoured, hypothesis. However, there's still
 room to improve the replication and test whether the small differences
@@ -535,39 +689,86 @@ MRW's original dataset.
 
 <table>
 <thead>
-<tr class="header">
-<th align="right">number</th>
-<th align="left">country</th>
-<th align="right">N</th>
-<th align="right">I</th>
-<th align="right">O</th>
-<th align="right">1960</th>
-<th align="right">1985</th>
-<th align="right">gdp_ch</th>
-<th align="right">working_age_pop_ch</th>
-<th align="right">s</th>
-<th align="right">school</th>
-<th align="right">n_g_d</th>
+<tr>
+<th style="text-align:right;">
+number
+</th>
+<th style="text-align:left;">
+country
+</th>
+<th style="text-align:right;">
+N
+</th>
+<th style="text-align:right;">
+I
+</th>
+<th style="text-align:right;">
+O
+</th>
+<th style="text-align:right;">
+1960
+</th>
+<th style="text-align:right;">
+1985
+</th>
+<th style="text-align:right;">
+gdp\_ch
+</th>
+<th style="text-align:right;">
+working\_age\_pop\_ch
+</th>
+<th style="text-align:right;">
+s
+</th>
+<th style="text-align:right;">
+school
+</th>
+<th style="text-align:right;">
+n\_g\_d
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="right">49</td>
-<td align="left">India</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">0</td>
-<td align="right">978</td>
-<td align="right">1339</td>
-<td align="right">3.6</td>
-<td align="right">2.4</td>
-<td align="right">16.8</td>
-<td align="right">5.1</td>
-<td align="right">7.4</td>
+<tr>
+<td style="text-align:right;">
+49
+</td>
+<td style="text-align:left;">
+India
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+978
+</td>
+<td style="text-align:right;">
+1339
+</td>
+<td style="text-align:right;">
+3.6
+</td>
+<td style="text-align:right;">
+2.4
+</td>
+<td style="text-align:right;">
+16.8
+</td>
+<td style="text-align:right;">
+5.1
+</td>
+<td style="text-align:right;">
+7.4
+</td>
 </tr>
 </tbody>
 </table>
-
 To explore whether this imprecision is responsible for the small
 differences in our estimates we can sample from a distribution taking
 values between -0.05 and +0.05 (or +/- 0.5 for the GDP figure) and add
