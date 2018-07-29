@@ -1,7 +1,7 @@
 ---
 layout: post
-author: 'Ed'
-title: 'MD Four'
+author: "Ed"
+title: "MD Five"
 ---
 In this post I finally solve the replication issues that plagued my last
 attempt. In hindsight, the naive addition of +5 to the
@@ -34,6 +34,8 @@ defined previously:
     library(dplyr)
     library(purrr)
     library(broom)
+    library(pander)
+
     MRW_clean <- read_csv('Data/Transformed Data/MRW_appendix_clean.csv')
     solow_MRW  <- read_csv('Data/Transformed Data/solow_MRW.csv',
                            col_types = cols(col_factor(NULL), col_double(), col_double(), col_factor(NULL)))
@@ -90,234 +92,25 @@ defined previously:
                                                'OECD 1',
                                                'OECD 2'))
 
-    knitr::kable(head(re_parametrisation_results, 10), format = 'html')
+    pandoc.table(head(re_parametrisation_results))
 
-<table>
-<thead>
-<tr>
-<th style="text-align:left;">
-term
-</th>
-<th style="text-align:right;">
-estimate
-</th>
-<th style="text-align:right;">
-std.error
-</th>
-<th style="text-align:right;">
-statistic
-</th>
-<th style="text-align:right;">
-p.value
-</th>
-<th style="text-align:left;">
-subset
-</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left;">
-(Intercept)
-</td>
-<td style="text-align:right;">
-8.0353051
-</td>
-<td style="text-align:right;">
-1.2789285
-</td>
-<td style="text-align:right;">
-6.282841
-</td>
-<td style="text-align:right;">
-0.0000000
-</td>
-<td style="text-align:left;">
-Non-Oil 0
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(s)
-</td>
-<td style="text-align:right;">
-1.4240143
-</td>
-<td style="text-align:right;">
-0.1431058
-</td>
-<td style="text-align:right;">
-9.950779
-</td>
-<td style="text-align:right;">
-0.0000000
-</td>
-<td style="text-align:left;">
-Non-Oil 0
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(n\_g\_d)
-</td>
-<td style="text-align:right;">
--1.9897745
-</td>
-<td style="text-align:right;">
-0.5633619
-</td>
-<td style="text-align:right;">
--3.531965
-</td>
-<td style="text-align:right;">
-0.0006385
-</td>
-<td style="text-align:left;">
-Non-Oil 0
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-(Intercept)
-</td>
-<td style="text-align:right;">
-4.5889772
-</td>
-<td style="text-align:right;">
-0.4321797
-</td>
-<td style="text-align:right;">
-10.618216
-</td>
-<td style="text-align:right;">
-0.0000000
-</td>
-<td style="text-align:left;">
-Non-Oil 1
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(s)
-</td>
-<td style="text-align:right;">
-1.3881114
-</td>
-<td style="text-align:right;">
-0.1415856
-</td>
-<td style="text-align:right;">
-9.804042
-</td>
-<td style="text-align:right;">
-0.0000000
-</td>
-<td style="text-align:left;">
-Non-Oil 1
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(n\_g\_d)
-</td>
-<td style="text-align:right;">
--0.5300861
-</td>
-<td style="text-align:right;">
-0.1297557
-</td>
-<td style="text-align:right;">
--4.085261
-</td>
-<td style="text-align:right;">
-0.0000919
-</td>
-<td style="text-align:left;">
-Non-Oil 1
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-(Intercept)
-</td>
-<td style="text-align:right;">
-5.4298831
-</td>
-<td style="text-align:right;">
-1.5838899
-</td>
-<td style="text-align:right;">
-3.428195
-</td>
-<td style="text-align:right;">
-0.0009000
-</td>
-<td style="text-align:left;">
-Non-Oil 2
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(s)
-</td>
-<td style="text-align:right;">
-1.4240143
-</td>
-<td style="text-align:right;">
-0.1431058
-</td>
-<td style="text-align:right;">
-9.950779
-</td>
-<td style="text-align:right;">
-0.0000000
-</td>
-<td style="text-align:left;">
-Non-Oil 2
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(n\_g\_d)
-</td>
-<td style="text-align:right;">
--1.9897745
-</td>
-<td style="text-align:right;">
-0.5633619
-</td>
-<td style="text-align:right;">
--3.531965
-</td>
-<td style="text-align:right;">
-0.0006385
-</td>
-<td style="text-align:left;">
-Non-Oil 2
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-(Intercept)
-</td>
-<td style="text-align:right;">
-8.5678580
-</td>
-<td style="text-align:right;">
-1.3050540
-</td>
-<td style="text-align:right;">
-6.565137
-</td>
-<td style="text-align:right;">
-0.0000000
-</td>
-<td style="text-align:left;">
-Intermediate 0
-</td>
-</tr>
-</tbody>
-</table>
+    ## 
+    ## ------------------------------------------------------------------------
+    ##     term       estimate   std.error   statistic    p.value     subset   
+    ## ------------- ---------- ----------- ----------- ----------- -----------
+    ##  (Intercept)    8.035       1.279       6.283     9.987e-09   Non-Oil 0 
+    ## 
+    ##    log(s)       1.424      0.1431       9.951     2.105e-16   Non-Oil 0 
+    ## 
+    ##  log(n_g_d)     -1.99      0.5634      -3.532     0.0006385   Non-Oil 0 
+    ## 
+    ##  (Intercept)    4.589      0.4322       10.62     7.943e-18   Non-Oil 1 
+    ## 
+    ##    log(s)       1.388      0.1416       9.804     4.333e-16   Non-Oil 1 
+    ## 
+    ##  log(n_g_d)    -0.5301     0.1298      -4.085     9.193e-05   Non-Oil 1 
+    ## ------------------------------------------------------------------------
+
 Now comparing the intercepts:
 
     library(tidyr)
@@ -388,286 +181,71 @@ Using the comparison function created last time:
             select(-attempt_no),
           results_original = solow_MRW)
 
-    knitr::kable(re_param_comparison)
+    pandoc.table(re_param_comparison)
 
-<table>
-<thead>
-<tr>
-<th style="text-align:left;">
-term
-</th>
-<th style="text-align:left;">
-subset
-</th>
-<th style="text-align:right;">
-estimate\_replicated
-</th>
-<th style="text-align:right;">
-estimate\_original
-</th>
-<th style="text-align:right;">
-diff
-</th>
-<th style="text-align:right;">
-rounded\_diff
-</th>
-<th style="text-align:right;">
-pct\_orig
-</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left;">
-(Intercept)
-</td>
-<td style="text-align:left;">
-Non-Oil
-</td>
-<td style="text-align:right;">
-5.4298831
-</td>
-<td style="text-align:right;">
-5.48
-</td>
-<td style="text-align:right;">
-0.0501169
-</td>
-<td style="text-align:right;">
-0.05
-</td>
-<td style="text-align:right;">
-0.9145420
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-(Intercept)
-</td>
-<td style="text-align:left;">
-Intermediate
-</td>
-<td style="text-align:right;">
-5.3458652
-</td>
-<td style="text-align:right;">
-5.36
-</td>
-<td style="text-align:right;">
-0.0141348
-</td>
-<td style="text-align:right;">
-0.01
-</td>
-<td style="text-align:right;">
-0.2637088
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-(Intercept)
-</td>
-<td style="text-align:left;">
-OECD
-</td>
-<td style="text-align:right;">
-8.0206068
-</td>
-<td style="text-align:right;">
-7.97
-</td>
-<td style="text-align:right;">
--0.0506068
-</td>
-<td style="text-align:right;">
--0.05
-</td>
-<td style="text-align:right;">
--0.6349656
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(n\_g\_d)
-</td>
-<td style="text-align:left;">
-Non-Oil
-</td>
-<td style="text-align:right;">
--1.9897745
-</td>
-<td style="text-align:right;">
--1.97
-</td>
-<td style="text-align:right;">
-0.0197745
-</td>
-<td style="text-align:right;">
-0.02
-</td>
-<td style="text-align:right;">
--1.0037809
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(n\_g\_d)
-</td>
-<td style="text-align:left;">
-Intermediate
-</td>
-<td style="text-align:right;">
--2.0171995
-</td>
-<td style="text-align:right;">
--2.01
-</td>
-<td style="text-align:right;">
-0.0071995
-</td>
-<td style="text-align:right;">
-0.01
-</td>
-<td style="text-align:right;">
--0.3581838
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(n\_g\_d)
-</td>
-<td style="text-align:left;">
-OECD
-</td>
-<td style="text-align:right;">
--0.7419215
-</td>
-<td style="text-align:right;">
--0.76
-</td>
-<td style="text-align:right;">
--0.0180785
-</td>
-<td style="text-align:right;">
--0.02
-</td>
-<td style="text-align:right;">
-2.3787554
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(s)
-</td>
-<td style="text-align:left;">
-Non-Oil
-</td>
-<td style="text-align:right;">
-1.4240143
-</td>
-<td style="text-align:right;">
-1.42
-</td>
-<td style="text-align:right;">
--0.0040143
-</td>
-<td style="text-align:right;">
-0.00
-</td>
-<td style="text-align:right;">
--0.2826960
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(s)
-</td>
-<td style="text-align:left;">
-Intermediate
-</td>
-<td style="text-align:right;">
-1.3175527
-</td>
-<td style="text-align:right;">
-1.31
-</td>
-<td style="text-align:right;">
--0.0075527
-</td>
-<td style="text-align:right;">
--0.01
-</td>
-<td style="text-align:right;">
--0.5765386
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(s)
-</td>
-<td style="text-align:left;">
-OECD
-</td>
-<td style="text-align:right;">
-0.4998895
-</td>
-<td style="text-align:right;">
-0.50
-</td>
-<td style="text-align:right;">
-0.0001105
-</td>
-<td style="text-align:right;">
-0.00
-</td>
-<td style="text-align:right;">
-0.0220925
-</td>
-</tr>
-</tbody>
-</table>
-    knitr::kable(re_param_comparison %>% 
+    ## 
+    ## ----------------------------------------------------------------------
+    ##     term          subset      estimate_replicated   estimate_original 
+    ## ------------- -------------- --------------------- -------------------
+    ##  (Intercept)     Non-Oil             5.43                 5.48        
+    ## 
+    ##  (Intercept)   Intermediate          5.346                5.36        
+    ## 
+    ##  (Intercept)       OECD              8.021                7.97        
+    ## 
+    ##  log(n_g_d)      Non-Oil             -1.99                -1.97       
+    ## 
+    ##  log(n_g_d)    Intermediate         -2.017                -2.01       
+    ## 
+    ##  log(n_g_d)        OECD             -0.7419               -0.76       
+    ## 
+    ##    log(s)        Non-Oil             1.424                1.42        
+    ## 
+    ##    log(s)      Intermediate          1.318                1.31        
+    ## 
+    ##    log(s)          OECD             0.4999                 0.5        
+    ## ----------------------------------------------------------------------
+    ## 
+    ## Table: Table continues below
+    ## 
+    ##  
+    ## -------------------------------------
+    ##    diff      rounded_diff   pct_orig 
+    ## ----------- -------------- ----------
+    ##   0.05012        0.05        0.9145  
+    ## 
+    ##   0.01413        0.01        0.2637  
+    ## 
+    ##  -0.05061       -0.05        -0.635  
+    ## 
+    ##   0.01977        0.02        -1.004  
+    ## 
+    ##  0.007199        0.01       -0.3582  
+    ## 
+    ##  -0.01808       -0.02        2.379   
+    ## 
+    ##  -0.004014        0         -0.2827  
+    ## 
+    ##  -0.007553      -0.01       -0.5765  
+    ## 
+    ##  0.0001105        0         0.02209  
+    ## -------------------------------------
+
+    pandoc.table(re_param_comparison %>% 
                    group_by(term) %>% 
                    summarise(mean(diff)))
 
-<table>
-<thead>
-<tr>
-<th style="text-align:left;">
-term
-</th>
-<th style="text-align:right;">
-mean(diff)
-</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left;">
-(Intercept)
-</td>
-<td style="text-align:right;">
-0.0045483
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(n\_g\_d)
-</td>
-<td style="text-align:right;">
-0.0029651
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-log(s)
-</td>
-<td style="text-align:right;">
--0.0038188
-</td>
-</tr>
-</tbody>
-</table>
+    ## 
+    ## --------------------------
+    ##     term       mean(diff) 
+    ## ------------- ------------
+    ##  (Intercept)    0.004548  
+    ## 
+    ##  log(n_g_d)     0.002965  
+    ## 
+    ##    log(s)      -0.003819  
+    ## --------------------------
+
 There's pretty conclusive evidence that my first argument was in fact
 correct and not my second, favoured, hypothesis. However, there's still
 room to improve the replication and test whether the small differences
@@ -685,90 +263,24 @@ MRW's original dataset.
 
     MRW_clean %>% 
       filter(number == 49) %>% 
-      knitr::kable()
+      pandoc.table()
 
-<table>
-<thead>
-<tr>
-<th style="text-align:right;">
-number
-</th>
-<th style="text-align:left;">
-country
-</th>
-<th style="text-align:right;">
-N
-</th>
-<th style="text-align:right;">
-I
-</th>
-<th style="text-align:right;">
-O
-</th>
-<th style="text-align:right;">
-1960
-</th>
-<th style="text-align:right;">
-1985
-</th>
-<th style="text-align:right;">
-gdp\_ch
-</th>
-<th style="text-align:right;">
-working\_age\_pop\_ch
-</th>
-<th style="text-align:right;">
-s
-</th>
-<th style="text-align:right;">
-school
-</th>
-<th style="text-align:right;">
-n\_g\_d
-</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:right;">
-49
-</td>
-<td style="text-align:left;">
-India
-</td>
-<td style="text-align:right;">
-1
-</td>
-<td style="text-align:right;">
-1
-</td>
-<td style="text-align:right;">
-0
-</td>
-<td style="text-align:right;">
-978
-</td>
-<td style="text-align:right;">
-1339
-</td>
-<td style="text-align:right;">
-3.6
-</td>
-<td style="text-align:right;">
-2.4
-</td>
-<td style="text-align:right;">
-16.8
-</td>
-<td style="text-align:right;">
-5.1
-</td>
-<td style="text-align:right;">
-7.4
-</td>
-</tr>
-</tbody>
-</table>
+    ## 
+    ## --------------------------------------------------------------------------
+    ##  number   country   N   I   O   1960   1985   gdp_ch   working_age_pop_ch 
+    ## -------- --------- --- --- --- ------ ------ -------- --------------------
+    ##    49      India    1   1   0   978    1339    3.6            2.4         
+    ## --------------------------------------------------------------------------
+    ## 
+    ## Table: Table continues below
+    ## 
+    ##  
+    ## -----------------------
+    ##   s     school   n_g_d 
+    ## ------ -------- -------
+    ##  16.8    5.1      7.4  
+    ## -----------------------
+
 To explore whether this imprecision is responsible for the small
 differences in our estimates we can sample from a distribution taking
 values between -0.05 and +0.05 (or +/- 0.5 for the GDP figure) and add
