@@ -257,7 +257,7 @@ The `create.rvs` function is pretty self-explanatory apart from maybe `enquo` an
 
 Next, we generate 10,000 simulations of the data and calculate the corresponding regression coefficients. Finally, we collect our results and `gather` into a long format to make plotting easier (this lets us use `facet_grid(subset ~ term)` later).
 
-Ideally when generating such a large number of draws we'd use some form of parallel processing as this is an example of an embarassingly parralel problem.^[https://en.wikipedia.org/wiki/Embarrassingly_parallel.] Fortunately, Davis Vaughan has recently developed furrr, a parallel implementation of `map` using the R's future library. ~~Unfortunately, I ran into an issue with dplyr's quasiquotation and `future_map` so the current code uses the traditional `map`.~~^[~~I've opened an issue here:~~ Davis has replied with a simple workaround! https://github.com/DavisVaughan/furrr/issues/25.]
+Ideally when generating such a large number of draws we'd use some form of parallel processing as this is an example of an embarrassingly parallel problem.^[https://en.wikipedia.org/wiki/Embarrassingly_parallel.] Fortunately, Davis Vaughan has recently developed furrr, a parallel implementation of `map` using the R's future library. ~~Unfortunately, I ran into an issue with dplyr's quasiquotation and `future_map` so the current code uses the traditional `map`.~~^[~~I've opened an issue here:~~ Davis has replied with a simple workaround! https://github.com/DavisVaughan/furrr/issues/25.]
 
 
 

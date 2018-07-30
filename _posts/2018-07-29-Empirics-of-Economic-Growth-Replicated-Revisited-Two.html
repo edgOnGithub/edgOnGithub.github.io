@@ -1,9 +1,8 @@
 ---
 layout: post
 author: "Ed"
-title: "Empirics of Economic Growth Replicated, Revisited II"
----
-<!DOCTYPE html>
+title: "Insert Title Here"
+---<!DOCTYPE html>
 
 <html xmlns="http://www.w3.org/1999/xhtml">
 
@@ -589,7 +588,7 @@ knitr<span class="op">::</span><span class="kw">kable</span>(re_param_comparison
 }</code></pre></div>
 <p>The <code>create.rvs</code> function is pretty self-explanatory apart from maybe <code>enquo</code> and <code>!!</code> - these let our function arguments play nicely with dplyr’s quasiquotation.<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a> The last few lines of the function ensure we’re using the correct parametrisation of <code>s</code> and <code>n_g_d</code> as well as filtering and removing missing <code>school</code> observations and finally <code>dummy_argument</code> is a quick work around to make <code>map</code> easier to run N times.</p>
 <p>Next, we generate 10,000 simulations of the data and calculate the corresponding regression coefficients. Finally, we collect our results and <code>gather</code> into a long format to make plotting easier (this lets us use <code>facet_grid(subset ~ term)</code> later).</p>
-<p>Ideally when generating such a large number of draws we’d use some form of parallel processing as this is an example of an embarassingly parralel problem.<a href="#fn2" class="footnoteRef" id="fnref2"><sup>2</sup></a> Fortunately, Davis Vaughan has recently developed furrr, a parallel implementation of <code>map</code> using the R’s future library. <del>Unfortunately, I ran into an issue with dplyr’s quasiquotation and <code>future_map</code> so the current code uses the traditional <code>map</code>.</del><a href="#fn3" class="footnoteRef" id="fnref3"><sup>3</sup></a></p>
+<p>Ideally when generating such a large number of draws we’d use some form of parallel processing as this is an example of an embarrassingly parallel problem.<a href="#fn2" class="footnoteRef" id="fnref2"><sup>2</sup></a> Fortunately, Davis Vaughan has recently developed furrr, a parallel implementation of <code>map</code> using the R’s future library. <del>Unfortunately, I ran into an issue with dplyr’s quasiquotation and <code>future_map</code> so the current code uses the traditional <code>map</code>.</del><a href="#fn3" class="footnoteRef" id="fnref3"><sup>3</sup></a></p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(furrr)
 <span class="kw">plan</span>(multiprocess)
 
