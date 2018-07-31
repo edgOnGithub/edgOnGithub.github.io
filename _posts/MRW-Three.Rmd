@@ -100,7 +100,7 @@ library(Rtsne)
 library(ggplot2)
 library(purrr)
 
-generate.tsne <- function(perplexity, data){
+generate.tsne <- function(perplexity, data, dims = 2){
   data <- data %>% 
     na.omit 
   
@@ -108,11 +108,14 @@ generate.tsne <- function(perplexity, data){
                                          -country,
                                          -number),
                      perplexity = perplexity,
-                     dims = 2,
+                     dims = dims,
                      verbose = FALSE,
                      max_iter = 500)
   tsne_df <- tibble(x = tsne_data$Y[,1],
                     y = tsne_data$Y[,2])
+  if (dims == 3){
+    tsne_df$z <- tsne_data$Y[,3]
+  }
   
   tsne_df <- bind_cols(tsne_df,
                        data)
@@ -120,6 +123,7 @@ generate.tsne <- function(perplexity, data){
   return(tsne_df)
   
 }
+
 ```
 
 Next, we plot the results in two dimensions and use the new factor we created as a colour mapping:
@@ -218,10 +222,7 @@ plot_ly(many_tsne,
                                                              size = 25))
   ) %>% 
   layout(xaxis = ax, yaxis = ax, title = 't-SNE Clustering as a Function of Perplexity') 
-
-
 ```
-
 
  
 ```{r map_tsne, eval = FALSE}
@@ -262,6 +263,28 @@ plot_ly(many_tsne,
 
 
 ```
+
+
+I think the following is a pretty good illustration of simplicity's importance in communicating ideas graphically:
+
+```{r plot_3d_tsne, cache = TRUE}
+many_tsne_3d <- 1:30 %>% 
+  map_df(generate.tsne, data = MRW_clean, dims = 3)
+plot_ly(many_tsne_3d,
+        x = ~x,
+        y = ~y,
+        z= ~z,
+        color = ~club,
+        frame = ~perplexity,
+        type = 'scatter3d',
+        mode = 'markers',
+        text = ~country,
+        hoverinfo = 'text',
+        marker = list(size = 15)) %>% 
+  layout(title = 't-SNE Clustering as a Function of Perplexity in 3D')
+```
+
+
 
 Another common dimensionality reduction or clustering approach is to use principal component analysis. Below we plot PCA using ggfortify's addition to `autoplot`:
 
