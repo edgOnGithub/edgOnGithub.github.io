@@ -339,7 +339,7 @@ solow_comparison_estimates <- parameters %>%
          results_replicated = solow_rep,
          results_original = solow_MRW)
 
-augmented_comparison_estimates <- parameters %>% 
+augmented_comparison_estimates <- c(parameters, 'log(school)') %>% 
   map_df(compare.results,
          parameter_type = 'estimate',
          results_replicated = augmented_rep,
@@ -352,7 +352,7 @@ solow_comparison_std_error <- parameters %>%
          results_replicated = solow_rep,
          results_original = solow_MRW)
 
-augmented_comparison_std_error<- parameters %>% 
+augmented_comparison_std_error<- c(parameters, 'log(school)') %>% 
   map_df(compare.results,
          parameter_type = 'std.error',
          results_replicated = augmented_rep,
