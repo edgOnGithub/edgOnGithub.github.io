@@ -12,4 +12,4 @@ This is my blog dedicated to replicating and reimagining older research papers i
 - Finally, I apply some more modern econometric techniques that may not have been available at the original paper's publication.
 
 
-I'm currently a student at the London School of Economics.
+I'm currently a student at the London School of Economics and can be contacted via email at E.M.Jee@lse.ac.uk.
