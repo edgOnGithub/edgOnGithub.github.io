@@ -1,0 +1,518 @@
+---
+output: 
+  html_document:
+    code_folding: show
+    highlight: kate
+    theme: paper
+editor_options:
+  chunk_output_type: console
+---
+
+```{r loading_data, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
+
+library(dplyr)
+MRW_clean <- readr::read_csv('assets/Transformed Data/MRW_appendix_clean.csv') %>% 
+  mutate(n_g_d = (working_age_pop_ch + 5)/ 100,
+         s = s / 100)
+  
+library(broom)
+collect.results <- function(models, names){
+  
+  results <- map2_dfr(.x = models,
+                      .y = names,
+                      .f = function(x, y){tidy(x) %>% mutate(subset = y)}) %>% 
+    as_tibble()
+  return(results)
+}
+
+
+compare.results <- function(parameter, parameter_type = 'estimate', results_replicated, results_original){
+  replicated_comparison <- results_replicated %>% 
+    filter(term == parameter) %>% 
+    select(term, subset, parameter_type)
+  
+  original_comparison <- results_original %>% 
+    filter(term == parameter) %>% 
+    select(term, subset, parameter_type)
+  
+  comparison_df <- full_join(x = replicated_comparison,
+                             y = original_comparison,
+                             by = c('term', 'subset'),
+                             suffix = c('_replicated', '_original'))
+  comparison_df$diff <- comparison_df[, grep('_original', colnames(comparison_df))] %>% 
+    pull - comparison_df[, grep('_replicated', colnames(comparison_df))] %>% 
+    pull
+  comparison_df$rounded_diff <- round(comparison_df$diff, 2)
+  comparison_df$pct_orig <- comparison_df$diff / comparison_df[, grep('_original', colnames(comparison_df))] %>% pull * 100
+  return(comparison_df)
+}
+
+```
+
+We explore the partitioning of Mankiw, Romer and Weil's dataset in "A Contribution to the Empirics of Economic Growth" through the use of dimensionality reduction/clustering algorithms and discover a few puzzles along the way. The paper's results seem to be robust to different partitioning methods, as the authors suggest, although we don't test this rigorously. Results for the Augmented Solow Model are also covered although aren't displayed here and can be viewed using the original Rmarkdown scripts on [GitHub](https://github.com/edgOnGithub/edgOnGithub.github.io/tree/master/_posts).  
+
+
+## Exploring Subsets
+
+
+MRW estimate the Solow and Augmented Solow model on three different subsets of the data. They use a 'Non-Oil' group of countries; an 'Intermediate' group and an 'OECD' group. However, group membership isn't mutually exclusive which makes visualisation a little tricky as we'll see in a bit. Furthermore, there are 23 observations that don't match any of these criteria in the dataset which is a little bizarre - the authors don't really have observations to spare when starting at 121.
+
+```{r odd_obs}
+library(dplyr)
+left_out_obs <- MRW_clean %>% 
+  filter(N == 0) %>%
+  filter(O == 0) %>%
+  filter(I == 0)  
+
+left_out_obs %>% 
+  head %>% 
+  knitr::kable()  
+
+```
+
+Whilst a lot of these observations are missing values, nine of them have enough data to be included in the model and an almost 10\% increase in sample size, even from a more heterogeneous group such as these, would probably improve the power of their tests.
+
+Moving on from these excluded observations we now turn to whether the partitioning, or at least the semi/sort-of partitioning, is justified in the data.
+
+## Clustering
+
+The ideal way to visualise the dummy variable labelling would be with a Venn diagram but unfortunately there isn't a great deal of Venn diagram material in R; instead we can exploit the fact that although there are six possible dummy variable combinations the dataset only contains four, unique and mutually exclusive factors. This becomes clear if we plot the `O`, `I`, `N` space:
+
+```{r scatter_3d}
+library(plotly)
+
+plot_ly(MRW_clean,
+        type = 'scatter3d',
+        mode = 'markers',
+        x = ~jitter(O),
+        y = ~jitter(I),
+        z= ~jitter(N),
+        color = ~`1985`,
+        text = ~paste0(country,
+                       '<br>OECD: ', 
+                       as.logical(O),
+                       '<br>Intermediate: ',
+                       as.logical(I),
+                       '<br>Non-Oil: ',
+                       as.logical(N)),
+        hoverinfo = 'text') %>% 
+    layout(scene = list(xaxis = list(title = 'OECD'),
+                     yaxis = list(title = 'Intermediate'),
+                     zaxis = list(title = 'Non-Oil')))
+
+
+```
+
+It makes sense to me to replace MRW's original dummy structure with these new, mutually exclusive dummies. Instinctively, using non-mutually exclusive dummies to partition the dataset with which to run the regressions seems wrong to me - we're oversampling some datapoints in my opinion.^[I think this boils down to the question: What population parameter are the authors trying to uncover? If the aim is to identify the parameter for each group e.g. for policy reasons or because they're of interest in their own right I don't see a problem. However, if the aim is to empirically identify the Solow model and these subsets are just drawn from some population, global hyper-parameter I think MRW's could be improved upon. Finally, regardless of the above, why not include the dummies and their interactions in a pooled model and at the very least include our nine excluded observations? ]
+
+
+Here we encode the four new dummies and convert them from separate dummy columns into a single column of factors named `club`. The conversion is a little finnicky and requires converting the dummy columns to a matrix and post multiplying by a column of 1s to get a single factor column:
+```{r dummies}
+club_dummies <- MRW_clean %>% 
+  transmute(developing_no_oil = ifelse(((O == 0) & (N == 1) & (I == 0)), 1, 0),
+         rich = ifelse(((O == 1) & (N == 1) & (I ==1)), 1, 0),
+         intermediate_no_oil = ifelse(((O == 0) & (N == 1) & (I == 1)), 1, 0),
+         oil = ifelse(((N == 0) & (I == 0) & (O == 0)), 1, 0))
+
+clubs <- factor(club_dummies %>% as.matrix() %*% 1:ncol(club_dummies), labels = colnames(club_dummies))
+MRW_clean$club <- clubs
+```
+
+
+Now we can perform the clustering analysis - the above steps weren't strictly necessary but the distinct factors let us visualise different groups with colour mappings easier.
+
+
+Here we perform [t-SNE](https://lvdmaaten.github.io/tsne/) which seems to be all the rage in the clustering scene right now. First, we create a function to perform the clustering and return a tibble with both the clustered co-ordinates and the corresponding features:
+```{r, tsne}
+library(Rtsne)
+library(ggplot2)
+library(purrr)
+
+generate.tsne <- function(perplexity, data, dims = 2){
+  data <- data %>% 
+    na.omit 
+  
+  tsne_data <- Rtsne(X = data %>% select(-club,
+                                         -country,
+                                         -number),
+                     perplexity = perplexity,
+                     dims = dims,
+                     verbose = FALSE,
+                     max_iter = 500)
+  tsne_df <- tibble(x = tsne_data$Y[,1],
+                    y = tsne_data$Y[,2])
+  if (dims == 3){
+    tsne_df$z <- tsne_data$Y[,3]
+  }
+  
+  tsne_df <- bind_cols(tsne_df,
+                       data)
+  tsne_df$perplexity <- perplexity
+  return(tsne_df)
+  
+}
+
+```
+
+Next, we plot the results in two dimensions and use the new factor we created as a colour mapping:
+
+```{r tsne_plot, echo = FALSE}
+tsne_df <- generate.tsne(30, MRW_clean)
+p <- ggplot(tsne_df,
+       aes(x = x,
+           y = y,
+           text = country)) +
+  geom_point(aes(size = `1985`,
+                 color = club)) +
+  guides(size = 'none') +
+  theme_minimal() +
+  ggtitle('Clustering/Dimensionality Reduction Using t-SNE with Colour')
+
+q <- ggplot(tsne_df,
+       aes(x = x,
+           y = y,
+           text = country)) +
+  geom_point() +
+  guides(size = 'none') +
+  theme_minimal() +
+  ggtitle('Clustering/Dimensionality Reduction Using t-SNE without Colour')
+p <- ggplotly(p, tooltip = 'text') 
+q <- ggplotly(q, tooltip = 'text')
+
+subplot(p, q) %>% 
+  layout(title = 'Clustering with and without group colours')
+
+```
+
+
+```{r tsne_no_eval, eval = FALSE}
+tsne_df <- generate.tsne(30, MRW_clean)
+p <- ggplot(tsne_df,
+       aes(x = x,
+           y = y,
+           text = country)) +
+  geom_point(aes(size = `1985`,
+                 color = club)) +
+  guides(size = 'none') +
+  theme_minimal() +
+  ggtitle('Clustering/Dimensionality Reduction Using t-SNE with Colour')
+
+q <- ggplot(tsne_df,
+       aes(x = x,
+           y = y,
+           text = country)) +
+  geom_point() +
+  guides(size = 'none') +
+  theme_minimal() +
+  ggtitle('Clustering/Dimensionality Reduction Using t-SNE without Colour')
+p <- ggplotly(p, tooltip = 'text') 
+q <- ggplotly(q, tooltip = 'text')
+
+subplot(p, q) %>% 
+  layout(title = 'Clustering with and without group colours')
+
+```
+Whilst the plot on the left makes a reasonable argument for partitioning the dataset I'd argue that a lot of this comes from the aesthetics `size` and `colour` we've supplied `ggplot`. Therefore, on the right is the same plot stripped of this additional information.
+
+
+t-SNE uses a number of hyper-parameters that need to be tuned - the above plots use the default values of `Rtsne`. Rather than using some loss metric as is traditional, for our purposes it's recommended to judge optimal parameter values using visual clarity/overall aesthetic. Therefore, below we `map` perplexity values from 1 to 30 and use [gganimate](https://github.com/thomasp85/gganimate) to help judge the optimal perplexity value. Personally, I think a value of around nine or ten looks best:
+```{r map_tsne_hidden, cache = TRUE, echo = FALSE}
+
+many_tsne <- 1:30 %>% 
+  map_df(generate.tsne, data = MRW_clean)
+
+ax <- list(
+  title = '',
+  zeroline = FALSE,
+  showline = FALSE,
+  showticklabels = FALSE,
+  showgrid = FALSE,
+  range = c(-50, 50)
+)
+plot_ly(many_tsne,
+        x = ~x,
+        y = ~y,
+        color = ~club,
+        frame = ~perplexity,
+        type = 'scatter',
+        mode = 'markers',
+        text = ~country,
+        hoverinfo = 'text',
+        marker = list(size = 15)) %>% 
+    animation_opts(
+    1000, easing = "elastic", redraw = FALSE
+  ) %>%  
+  animation_button(
+    x = 0, xanchor = "left", y = 0.1, yanchor = "top"
+  ) %>%
+  animation_slider(
+    currentvalue = list(prefix = "Perplexity: ", font = list(color="red",
+                                                             size = 25))
+  ) %>% 
+  layout(xaxis = ax, yaxis = ax, title = 't-SNE Clustering as a Function of Perplexity') 
+```
+
+ 
+```{r map_tsne, eval = FALSE}
+
+many_tsne <- 1:30 %>% 
+  map_df(generate.tsne, data = MRW_clean)
+
+## plotly
+ax <- list(
+  title = '',
+  zeroline = FALSE,
+  showline = FALSE,
+  showticklabels = FALSE,
+  showgrid = FALSE,
+  range = c(-50, 50)
+)
+plot_ly(many_tsne,
+        x = ~x,
+        y = ~y,
+        color = ~club,
+        frame = ~perplexity,
+        type = 'scatter',
+        mode = 'markers',
+        text = ~country,
+        hoverinfo = 'text',
+        marker = list(size = 15)) %>% 
+    animation_opts(
+    1000, easing = "elastic", redraw = FALSE
+  ) %>%  
+  animation_button(
+    x = 0, xanchor = "left", y = 0.1, yanchor = "top"
+  ) %>%
+  animation_slider(
+    currentvalue = list(prefix = "Perplexity: ", font = list(color="red",
+                                                             size = 25))
+  ) %>% 
+  layout(xaxis = ax, yaxis = ax, title = 't-SNE Clustering as a Function of Perplexity') 
+
+
+```
+
+
+I think the following is a pretty good illustration of simplicity's importance in communicating ideas graphically:
+
+```{r plot_3d_tsne, cache = TRUE}
+many_tsne_3d <- 1:30 %>% 
+  map_df(generate.tsne, data = MRW_clean, dims = 3)
+plot_ly(many_tsne_3d,
+        x = ~x,
+        y = ~y,
+        z= ~z,
+        color = ~club,
+        frame = ~perplexity,
+        type = 'scatter3d',
+        mode = 'markers',
+        text = ~country,
+        hoverinfo = 'text',
+        marker = list(size = 15)) %>% 
+  layout(title = 't-SNE Clustering as a Function of Perplexity in 3D')
+```
+
+
+
+Another common dimensionality reduction or clustering approach is to use principal component analysis. Below we plot PCA using ggfortify's addition to `autoplot`:
+
+```{r}
+library(ggfortify)
+pca_df  <- prcomp(MRW_clean %>% na.omit %>% select(-number, -country, -club),
+                 center = TRUE,
+                 scale. = TRUE) 
+
+p <- autoplot(prcomp(MRW_clean %>% na.omit %>% select(-number, -country, -club),
+                center= TRUE,
+                scale. = TRUE),
+         data = MRW_clean %>% na.omit %>% mutate(GDP = `1985`), colour = 'club', size = 5) +
+  guides(size = 'none') +
+  theme_minimal() +
+  ggtitle('Clustering/Dimensionality Reduction Using PCA')
+
+p
+
+```
+
+Mankiw, Romer and Weil decide to partition the dataset using their own domain knowledge and theory. This is an entirely valid way to make decisions and ideally, but not necessarily, the data would support their decision. I think in this case whilst the evidence using both PCA and t-SNE isn't clear cut it can definitely be argued either way. 
+
+
+## New Dummy Model 
+Now we move on and compare our new dummy results with the originals.
+
+Loading the original results and running the 'new models':
+```{r load_comp}
+library(readr)
+solow_MRW <- read_csv('assets/Transformed Data/solow_MRW.csv')
+augmented_MRW <- read_csv('assets/Transformed Data/augmented_MRW.csv')
+
+solow_formula <- log(`1985`) ~ log(s) + log(`n_g_d`)
+
+## Oil
+oil_data <- MRW_clean %>% 
+  filter(club == 'oil') %>% 
+  filter(!is.na(school)) # MRW drop missing school observations to make comparisons easier
+
+oil_model <- lm(solow_formula,
+                data = oil_data)
+
+## Intermediate
+intermediate_data <- MRW_clean %>% 
+  filter(club == 'intermediate_no_oil') %>% 
+  filter(!is.na(school))
+
+intermediate_model <- lm(solow_formula,
+                         data = intermediate_data)
+
+## Rich
+rich_data <- MRW_clean %>% 
+  filter(club == 'rich') %>% 
+  filter(!is.na(school))
+
+rich_model <- lm(solow_formula,
+                 data = rich_data)
+
+## Developing
+developing_data <- MRW_clean %>% 
+  filter(club == 'developing_no_oil') %>% 
+  filter(!is.na(school))
+
+developing_model <- lm(solow_formula,
+                       data = developing_data)
+
+#### Augmented Model
+augmented_formula <- log(`1985`) ~ log(s) + log(n_g_d) + log(school)
+
+##  Oil
+aug_oil_model <- lm(augmented_formula,
+                        data = oil_data)
+
+
+## Intermediate
+aug_intermediate_model <- lm(augmented_formula,
+                             data = intermediate_data)
+
+
+## OECD
+
+aug_rich_model <- lm(augmented_formula,
+                     data = rich_data)
+## Developing
+aug_developing_model <- lm(augmented_formula,
+                           data = developing_data)
+
+
+```
+
+Here we collect and compare the results using functions from my very first post:
+
+```{r coll_results}
+library(knitr)
+model_names <-  list('Oil',
+                     'Intermediate',
+                     'Rich',
+                     'Developing')
+solow_new_dummies <- collect.results(models = list(oil_model,
+                                                   intermediate_model,
+                                                   rich_model,
+                                                   developing_model),
+                                    names = model_names)
+
+augmented_new_dummies <- collect.results(models = list(aug_oil_model,
+                                                       aug_intermediate_model,
+                                                       aug_rich_model,
+                                                       aug_developing_model),
+                                         names = model_names)
+
+comparison_tbl <- bind_rows(solow_new_dummies %>%
+                              select(term, estimate, subset) %>%
+                              mutate(type = 'New'),
+                            solow_MRW %>% select(term, estimate, subset) %>% 
+                              mutate(subset = paste0(subset, ' MRW'),
+                                     type = 'Original'))
+comparison_tbl %>%
+  head %>% 
+  kable
+```
+
+
+
+When we ignore the 'Oil' column the results are broadly similar although it's worth noting that standard errors and confidence intervals aren't displayed here:
+```{r plot_results, fig.height = 8}
+plot_new_vs_old <- function(term_type, data, std_error = FALSE ){
+  if (std_error == TRUE){
+    data <- data %>% 
+      mutate(estimate = `std.error`)
+  }
+  
+  new_data <- data %>% 
+    filter(term == term_type) %>% 
+    filter(type == 'New') %>% 
+    mutate(estimate = abs(estimate))
+  
+  old_data <- data %>% 
+    filter(term == term_type) %>% 
+    filter(type == 'Original') %>% 
+    mutate(estimate =  abs(estimate))
+  
+  
+  p <- plot_ly(new_data,
+               x = ~subset,
+               y = ~estimate,
+               type = 'bar',
+               color = ~subset)
+  
+  q <- plot_ly(old_data,
+               x = ~subset,
+               y = ~estimate,
+               type = 'bar',
+               color = ~subset,
+               colors = "Set1")
+  
+  pq <- subplot(p, q, nrows = 1, shareY = TRUE) %>% 
+    layout(yaxis = list(title = term_type))
+  return(pq)
+}
+
+p <- plot_new_vs_old('(Intercept)', comparison_tbl)
+
+q <- plot_new_vs_old('log(s)', comparison_tbl)
+
+r <- plot_new_vs_old('log(n_g_d)', comparison_tbl)
+
+subplot(p,q,r,nrows = 3, titleY = TRUE) %>% 
+  layout(showlegend = FALSE,
+         title = 'Comparing estimates with new and old partitions')
+
+```
+
+Whilst the sample size reduction does increase the standard errors the difference doesn't look to be huge - it's hard to say whether this will have a large effect on the conclusions drawn from the data from this graph alone.
+```{r, fig.height = 8}
+comparison_tbl_se <- bind_rows(solow_new_dummies %>%
+                              select(term, std.error, subset) %>%
+                              mutate(type = 'New'),
+                            solow_MRW %>% select(term, std.error, subset) %>% 
+                              mutate(subset = paste0(subset, ' MRW'),
+                                     type = 'Original'))
+
+p <- plot_new_vs_old('(Intercept)', comparison_tbl_se, std_error = TRUE)
+
+q <- plot_new_vs_old('log(s)', comparison_tbl_se, std_error = TRUE)
+
+r <- plot_new_vs_old('log(n_g_d)', comparison_tbl_se, std_error = TRUE)
+
+subplot(p,q,r,nrows = 3, titleY = TRUE) %>% 
+  layout(showlegend = FALSE,
+         title = 'Comparing standard errors with new and old partitions')
+```
+
+## Conclusion
+
+We've explored some of the modelling assumptions of Mankiw, Romer and Weil's "A Contribution to the Empirics of Economic Growth" and found that subsetting the data along different lines doesn't seem to largely change any results although we don't examine this rigorously.
+
+There's supportive evidence in the data for splitting up observations although both the PCA and t-SNE, I'd argue, are by no means definitive.
+
+Re-partitioning the data into mutually exclusive subsets is, in my opinion, an improvement on the original method.The last few graphs clearly highlight MRW were most likely justified in excluding economies largely reliant on oil.
