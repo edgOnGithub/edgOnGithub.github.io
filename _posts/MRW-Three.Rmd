@@ -17,11 +17,42 @@ library(dplyr)
 MRW_clean <- readr::read_csv('assets/Transformed Data/MRW_appendix_clean.csv') %>% 
   mutate(n_g_d = (working_age_pop_ch + 5)/ 100,
          s = s / 100)
-solow_MRW <- readr::read_csv('assets/Transformed Data/solow_MRW.csv')
   
+library(broom)
+collect.results <- function(models, names){
+  
+  results <- map2_dfr(.x = models,
+                      .y = names,
+                      .f = function(x, y){tidy(x) %>% mutate(subset = y)}) %>% 
+    as_tibble()
+  return(results)
+}
+
+
+compare.results <- function(parameter, parameter_type = 'estimate', results_replicated, results_original){
+  replicated_comparison <- results_replicated %>% 
+    filter(term == parameter) %>% 
+    select(term, subset, parameter_type)
+  
+  original_comparison <- results_original %>% 
+    filter(term == parameter) %>% 
+    select(term, subset, parameter_type)
+  
+  comparison_df <- full_join(x = replicated_comparison,
+                             y = original_comparison,
+                             by = c('term', 'subset'),
+                             suffix = c('_replicated', '_original'))
+  comparison_df$diff <- comparison_df[, grep('_original', colnames(comparison_df))] %>% 
+    pull - comparison_df[, grep('_replicated', colnames(comparison_df))] %>% 
+    pull
+  comparison_df$rounded_diff <- round(comparison_df$diff, 2)
+  comparison_df$pct_orig <- comparison_df$diff / comparison_df[, grep('_original', colnames(comparison_df))] %>% pull * 100
+  return(comparison_df)
+}
+
 ```
 
-Intro stuff
+We explore the partitioning of Mankiw, Romer and Weil's dataset in "A Contribution to the Empirics of Economic Growth" through the use of dimensionality reduction/clustering algorithms and discover a few puzzles along the way. The paper's results seem to be robust to different partitioning methods, as the authors suggest, although we don't test this rigorously. Results for the Augmented Solow Model are also covered although aren't displayed here and can be viewed using the original Rmarkdown scripts on [GitHub](https://github.com/edgOnGithub/edgOnGithub.github.io/tree/master/_posts).  
 
 
 ## Exploring Subsets
@@ -75,7 +106,7 @@ plot_ly(MRW_clean,
 
 ```
 
-It makes sense to me to replace MRW's original dummy structure with these new, mutually exclusive dummies. Instinctively, using non-mutually exclusive dummies to partition the dataset with which to run the regressions seems wrong to me - we're oversampling some datapoints in my opinion - I discuss this more in the post's conclusion.
+It makes sense to me to replace MRW's original dummy structure with these new, mutually exclusive dummies. Instinctively, using non-mutually exclusive dummies to partition the dataset with which to run the regressions seems wrong to me - we're oversampling some datapoints in my opinion.^[I think this boils down to the question: What population parameter are the authors trying to uncover? If the aim is to identify the parameter for each group e.g. for policy reasons or because they're of interest in their own right I don't see a problem. However, if the aim is to empirically identify the Solow model and these subsets are just drawn from some population, global hyper-parameter I think MRW's could be improved upon. Finally, regardless of the above, why not include the dummies and their interactions in a pooled model and at the very least include our nine excluded observations? ]
 
 
 Here we encode the four new dummies and convert them from separate dummy columns into a single column of factors named `club`. The conversion is a little finnicky and requires converting the dummy columns to a matrix and post multiplying by a column of 1s to get a single factor column:
@@ -306,10 +337,182 @@ p
 
 ```
 
+Mankiw, Romer and Weil decide to partition the dataset using their own domain knowledge and theory. This is an entirely valid way to make decisions and ideally, but not necessarily, the data would support their decision. I think in this case whilst the evidence using both PCA and t-SNE isn't clear cut it can definitely be argued either way. 
 
+
+## New Dummy Model 
+Now we move on and compare our new dummy results with the originals.
+
+Loading the original results and running the 'new models':
+```{r load_comp}
+library(readr)
+solow_MRW <- read_csv('assets/Transformed Data/solow_MRW.csv')
+augmented_MRW <- read_csv('assets/Transformed Data/augmented_MRW.csv')
+
+solow_formula <- log(`1985`) ~ log(s) + log(`n_g_d`)
+
+## Oil
+oil_data <- MRW_clean %>% 
+  filter(club == 'oil') %>% 
+  filter(!is.na(school)) # MRW drop missing school observations to make comparisons easier
+
+oil_model <- lm(solow_formula,
+                data = oil_data)
+
+## Intermediate
+intermediate_data <- MRW_clean %>% 
+  filter(club == 'intermediate_no_oil') %>% 
+  filter(!is.na(school))
+
+intermediate_model <- lm(solow_formula,
+                         data = intermediate_data)
+
+## Rich
+rich_data <- MRW_clean %>% 
+  filter(club == 'rich') %>% 
+  filter(!is.na(school))
+
+rich_model <- lm(solow_formula,
+                 data = rich_data)
+
+## Developing
+developing_data <- MRW_clean %>% 
+  filter(club == 'developing_no_oil') %>% 
+  filter(!is.na(school))
+
+developing_model <- lm(solow_formula,
+                       data = developing_data)
+
+#### Augmented Model
+augmented_formula <- log(`1985`) ~ log(s) + log(n_g_d) + log(school)
+
+##  Oil
+aug_oil_model <- lm(augmented_formula,
+                        data = oil_data)
+
+
+## Intermediate
+aug_intermediate_model <- lm(augmented_formula,
+                             data = intermediate_data)
+
+
+## OECD
+
+aug_rich_model <- lm(augmented_formula,
+                     data = rich_data)
+## Developing
+aug_developing_model <- lm(augmented_formula,
+                           data = developing_data)
+
+
+```
+
+Here we collect and compare the results using functions from my very first post:
+
+```{r coll_results}
+library(knitr)
+model_names <-  list('Oil',
+                     'Intermediate',
+                     'Rich',
+                     'Developing')
+solow_new_dummies <- collect.results(models = list(oil_model,
+                                                   intermediate_model,
+                                                   rich_model,
+                                                   developing_model),
+                                    names = model_names)
+
+augmented_new_dummies <- collect.results(models = list(aug_oil_model,
+                                                       aug_intermediate_model,
+                                                       aug_rich_model,
+                                                       aug_developing_model),
+                                         names = model_names)
+
+comparison_tbl <- bind_rows(solow_new_dummies %>%
+                              select(term, estimate, subset) %>%
+                              mutate(type = 'New'),
+                            solow_MRW %>% select(term, estimate, subset) %>% 
+                              mutate(subset = paste0(subset, ' MRW'),
+                                     type = 'Original'))
+comparison_tbl %>%
+  head %>% 
+  kable
+```
+
+
+
+When we ignore the 'Oil' column the results are broadly similar although it's worth noting that standard errors and confidence intervals aren't displayed here:
+```{r plot_results, fig.height = 8}
+plot_new_vs_old <- function(term_type, data, std_error = FALSE ){
+  if (std_error == TRUE){
+    data <- data %>% 
+      mutate(estimate = `std.error`)
+  }
+  
+  new_data <- data %>% 
+    filter(term == term_type) %>% 
+    filter(type == 'New') %>% 
+    mutate(estimate = abs(estimate))
+  
+  old_data <- data %>% 
+    filter(term == term_type) %>% 
+    filter(type == 'Original') %>% 
+    mutate(estimate =  abs(estimate))
+  
+  
+  p <- plot_ly(new_data,
+               x = ~subset,
+               y = ~estimate,
+               type = 'bar',
+               color = ~subset)
+  
+  q <- plot_ly(old_data,
+               x = ~subset,
+               y = ~estimate,
+               type = 'bar',
+               color = ~subset,
+               colors = "Set1")
+  
+  pq <- subplot(p, q, nrows = 1, shareY = TRUE) %>% 
+    layout(yaxis = list(title = term_type))
+  return(pq)
+}
+
+p <- plot_new_vs_old('(Intercept)', comparison_tbl)
+
+q <- plot_new_vs_old('log(s)', comparison_tbl)
+
+r <- plot_new_vs_old('log(n_g_d)', comparison_tbl)
+
+subplot(p,q,r,nrows = 3, titleY = TRUE) %>% 
+  layout(showlegend = FALSE,
+         title = 'Comparing estimates with new and old partitions')
+
+```
+
+Whilst the sample size reduction does increase the standard errors the difference doesn't look to be huge - it's hard to say whether this will have a large effect on the conclusions drawn from the data from this graph alone.
+```{r, fig.height = 8}
+comparison_tbl_se <- bind_rows(solow_new_dummies %>%
+                              select(term, std.error, subset) %>%
+                              mutate(type = 'New'),
+                            solow_MRW %>% select(term, std.error, subset) %>% 
+                              mutate(subset = paste0(subset, ' MRW'),
+                                     type = 'Original'))
+
+p <- plot_new_vs_old('(Intercept)', comparison_tbl_se, std_error = TRUE)
+
+q <- plot_new_vs_old('log(s)', comparison_tbl_se, std_error = TRUE)
+
+r <- plot_new_vs_old('log(n_g_d)', comparison_tbl_se, std_error = TRUE)
+
+subplot(p,q,r,nrows = 3, titleY = TRUE) %>% 
+  layout(showlegend = FALSE,
+         title = 'Comparing standard errors with new and old partitions')
+```
 
 ## Conclusion
 
-I think this comes down to the question: What population parameter are the authors trying to uncover? If the aim is to identify the parameter for each group e.g. for policy reasons or because they're of interest in their own right I don't see a problem. However, if the aim is to empirically identify the Solow model and these subsets are just drawn from some population, global hyperparameter I think MRW's approach is questionable if not incorrect. Finally, regardless of the above, why not include the dummies and their interactions in a pooled model and at the very least include our nine excluded observations? 
+We've explored some of the modelling assumptions of Mankiw, Romer and Weil's "A Contribution to the Empirics of Economic Growth" and found that subsetting the data along different lines doesn't seem to largely change any results although we don't examine this rigorously.
 
-Regardless, econometrics has moved lightyears since this paper and hindsight is 20/20
+There's supportive evidence in the data for splitting up observations although both the PCA and t-SNE, I'd argue, are by no means definitive.
+
+Re-partitioning the data into mutually exclusive subsets is, in my opinion, an improvement on the original method.The last few graphs clearly highlight MRW were most likely justified in excluding economies largely reliant on oil.
