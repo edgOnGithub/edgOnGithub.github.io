@@ -8,12 +8,14 @@ editor_options:
   chunk_output_type: console
 ---
 
+I do XYZ.
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE,
                       message = FALSE,
                       warning = FALSE)
 library(dplyr)
-MRW_clean <- readr::read_csv('assets/Transformed Data/MRW_appendix_clean.csv') %>% 
+MRW_clean <- readr::read_csv('assets/Transformed Data/MRW_clean_new_dummies.csv') %>% 
   mutate(n_g_d = (working_age_pop_ch + 5)/ 100,
          s = s / 100)
 library(broom)
@@ -25,15 +27,53 @@ collect.results <- function(models, names){
     as_tibble()
   return(results)
 }
+
+
+plot_new_vs_old <- function(term_type, data, std_error = FALSE ){
+  if (std_error == TRUE){
+    data <- data %>% 
+      mutate(estimate = `std.error`)
+  }
+  
+  new_data <- data %>% 
+    filter(term == term_type) %>% 
+    filter(type == 'New') %>% 
+    mutate(estimate = abs(estimate))
+  
+  old_data <- data %>% 
+    filter(term == term_type) %>% 
+    filter(type == 'Original') %>% 
+    mutate(estimate =  abs(estimate))
+  
+  
+  p <- plot_ly(new_data,
+               x = ~subset,
+               y = ~estimate,
+               type = 'bar',
+               color = ~subset)
+  
+  q <- plot_ly(old_data,
+               x = ~subset,
+               y = ~estimate,
+               type = 'bar',
+               color = ~subset,
+               colors = "Set1")
+  
+  pq <- subplot(p, q, nrows = 1, shareY = TRUE, shareX = TRUE) %>% 
+    layout(yaxis = list(title = term_type))
+  return(pq)
+}
 ```
 
+
+Running the restricted regressions.
 ```{r, table_1}
 library(purrr)
 library(tidyr)
 
 MRW_clean_restricted <- MRW_clean %>% 
   mutate(restricted_regressor = log(s) - log(n_g_d))
-restricted_models <- c('N',
+restricted_models_old <- c('N',
                       'I',
                       'O') %>% 
   map(sym) %>% 
@@ -45,10 +85,12 @@ restricted_models <- c('N',
 
 ```
 
+
+Collecting results and calculating alpha. Then do same for augmented model.
 ```{r}
   
 
-restricted_model_results <- restricted_models %>% 
+restricted_model_results_old <- restricted_models_old %>% 
   collect.results(., names = c("OECD Restricted Classic",
                                "Intermediate Restricted Classic",
                                "Non-Oil Restricted Classic"))
@@ -57,14 +99,14 @@ calculate.alpha <- function(estimate){
   alpha <- estimate / (1 + estimate)
   return(alpha)
 }
-restricted_model_results <- restricted_model_results %>% 
+restricted_model_results_old <- restricted_model_results_old %>% 
   mutate(alpha = ifelse((term == 'restricted_regressor'), calculate.alpha(estimate), NA))
 
 ## Augmented model
 MRW_augmented_restricted <- MRW_clean_restricted %>% 
   mutate(restricted_regressor_hc = log(school / 100) - log(n_g_d))
 
-augmented_restricted_model <- c("O",
+augmented_restricted_model_old <- c("O",
                                 "I",
                                 "N") %>% 
   map(sym) %>% 
@@ -81,7 +123,7 @@ find.param <- function(y, x){
   return(param)
 }
 
-augmented_parameters <- augmented_restricted_model %>%
+augmented_parameters <- augmented_restricted_model_old %>%
   select(term, subset, estimate) %>% 
   filter(term != "(Intercept)") %>% 
   spread(term, estimate) %>% 
@@ -91,7 +133,7 @@ augmented_parameters <- augmented_restricted_model %>%
          beta = round(beta, 2)) %>% 
   select(subset, alpha, beta)
 
-classic_parameters <- restricted_model_results %>% 
+classic_parameters <- restricted_model_results_old %>% 
   select(subset, alpha) %>% 
   drop_na() %>% 
   mutate(alpha = round(alpha, 2))
@@ -99,29 +141,156 @@ classic_parameters <- restricted_model_results %>%
 classic_parameters
 augmented_parameters
 
-estimated_parameters <- bind_rows(classic_parameters,
+estimated_parameters_old <- bind_rows(classic_parameters,
                                   augmented_parameters) %>% 
   separate(subset, c("subset",
                      "estimation_type",
                      "model_type"),
            sep = " ")
-estimated_parameters
+estimated_parameters_old
 ```
 
 
-```{r, modelling}
 
-k <- seq(from = 0, to = 100, by = 1)
-calculate.k.t.1 <- function(s, n, g, d, k, alpha){
-  sy <- s*k^alpha
-  net_dep <- (1 - (n + g + d))*k
-  k_t_1 <-  sy + net_dep
-  vals <- c(sy,
-            net_dep,
-            k_t_1)
-  names(vals) <- NULL
-  return(vals)
+now comparing with new subset estimates
+
+```{r}
+
+
+classic_parameters_new <- c("oil",
+                           "developing_no_oil",
+                           "intermediate_no_oil",
+                           "rich") %>%  
+  map(~filter(MRW_clean_restricted, club == .)) %>% 
+  map(~lm(log(`1985`) ~ restricted_regressor,
+                       data = .)) %>% 
+  collect.results(., names = c("Oil Restricted Classic",
+                               "Developing Restricted Classic",
+                               "Intermediate Restricted Classic",
+                               "Rich Restricted Classic")) %>% 
+  mutate(alpha = ifelse((term == 'restricted_regressor'), calculate.alpha(estimate), NA))
+
+
+
+
+augmented_parameters_new <- c("oil",
+                           "developing_no_oil",
+                           "intermediate_no_oil",
+                           "rich") %>% 
+  map(~filter(MRW_augmented_restricted, club == .)) %>% 
+  map(~lm(log(`1985`) ~ restricted_regressor + restricted_regressor_hc,
+                       data = .)) %>% 
+  collect.results(., names = c("Oil Restricted Augmented",
+                               "Developing Restricted Augmented",
+                               "Intermediate Restricted Augmented",
+                               "Rich Restricted Augmented")) %>% 
+  select(term, subset, estimate) %>% 
+  filter(term != "(Intercept)") %>% 
+  spread(term, estimate) %>% 
+  mutate(alpha = find.param(restricted_regressor_hc, restricted_regressor),
+         beta = find.param(restricted_regressor, restricted_regressor_hc),
+         alpha = round(alpha, 2),
+         beta = round(beta, 2)) %>% 
+  select(subset, alpha, beta)
+
+
+
+###
+classic_parameters_new <- classic_parameters_new %>% 
+  select(subset, alpha) %>% 
+  drop_na() %>% 
+  mutate(alpha = round(alpha, 2))
+
+classic_parameters_new
+augmented_parameters_new
+
+estimated_parameters_new <- bind_rows(classic_parameters_new,
+                                  augmented_parameters_new) %>% 
+  separate(subset, c("subset",
+                     "estimation_type",
+                     "model_type"),
+           sep = " ")
+estimated_parameters_new
+
+```
+
+
+
+dropping oil as a little crazy and comparing
+
+```{r}
+library(knitr)
+estimated_parameters_new <- estimated_parameters_new %>% 
+  filter(subset != 'Oil')
+
+
+comparison_tbl <- bind_rows(estimated_parameters_new %>%
+                              select(model_type, subset, alpha, beta) %>%
+                              mutate(type = 'New'),
+                            estimated_parameters_old %>% select(model_type, subset, alpha, beta) %>% 
+                              mutate(subset = paste0(subset, ' MRW'),
+                                     type = 'Original')) 
+
+comparison_tbl %>%
+  head %>% 
+  kable
+```
+
+
+plotting alpha and beta
+
+```{r}
+library(plotly)
+library(forcats)
+comparison_plot <- comparison_tbl %>% 
+  gather(term, estimate, alpha, beta)
+
+comparison_plot$subset <- factor(comparison_plot$subset,
+                                 levels = c('Developing',
+                                            'Intermediate',
+                                            'Rich',
+                                            'Non-Oil MRW',
+                                            'Intermediate MRW',
+                                            'OECD MRW'),
+                                 ordered = TRUE)
+
+
+p <- plot_new_vs_old('alpha', comparison_plot)
+
+q <- plot_new_vs_old('beta', comparison_plot) 
+
+
+subplot(p, q, nrows = 2, titleY = TRUE) %>% 
+  layout(showlegend = FALSE,
+         title = 'Calculating alpha and beta with new and old partitions')
+
+
+```
+
+
+
+```{r, modelling}
+k <- rep(seq(from = 0, to = 25, by = .5), nrow(MRW_clean))
+countries <- rep(MRW_clean$country, 51)
+
+country_tbl <- tibble('k' = k,
+                      'country' = countries) %>% 
+  left_join(y = MRW_clean %>% 
+              select(s, n_g_d, country), by = 'country') %>% 
+  mutate(saving_curve_)
+
+
+find.saving.point <- function(k, alpha, s){
+  point <- s*k^alpha
+  return(point)
 }
+
+find.effective.depreciation <- function(k, n = 0, g = 0, d = 0){
+  eff_depreciation <- k*(n + g + d)
+  return(eff_depreciation)
+}
+
+
 s_uk <- MRW_clean %>% 
   filter(country == "United Kingdom") %>% 
   select(s)
@@ -131,12 +300,47 @@ n_g_d_uk <- MRW_clean %>%
 alpha_uk <- 0.36
 
 
+
+savings <- k %>% 
+  map_df(find.saving.point,
+         alpha = alpha_uk,
+         s = s_uk)
+eff_dep <- k %>% 
+  map_df(find.effective.depreciation,
+         n = n_g_d_uk,
+         g = 0,
+         d = 0)
+
+plot_tbl <- bind_cols(eff_dep, savings)
+plot_tbl$k <- k
+
+
+ggplot(plot_tbl,
+       aes(x = k,
+           y = s)) +
+  geom_point() +
+  geom_point(aes(k, n_g_d)) +
+  geom_point(aes(k_star$s, find.saving.point(k_star,
+                                           alpha_uk,
+                                           s_uk)$s),
+             colour = 'red')
+
+
+
+
+
+
+library(plotly)
+
+
+
+
 uk_k_t <- tibble(time = seq(from = 0, to = 100, by = 1))
 init_k <- 0
 
+k_star <- (s_uk / n_g_d_uk) ^ (1 / (1 - alpha_uk))
 
-
-k <- calculate.k.t.1(k = 100,
+k <- calculate.k.t.1(k = 1,
            s = s_uk,
            n = n_g_d_uk,
            g = 0,
@@ -173,7 +377,7 @@ ggplot(k_tbl,
 ```
 
 
-```{r, stargazer , results='asis'}
+```{r, stargazer, results='asis'}
 library(latex2exp)
 restricted_models %>% 
     stargazer::stargazer(type = 'html',
