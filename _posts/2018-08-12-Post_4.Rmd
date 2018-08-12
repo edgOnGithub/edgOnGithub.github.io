@@ -311,9 +311,10 @@ ggplot(country_tbl %>%
          filter(model_type == "Classic") %>% 
          filter(country == random_country), aes(k, savings_curve, group = country)) +
   geom_line() +
+  geom_line(aes(k, depreciation_curve/100)) +
   ggtitle(random_country)
 
-
+## TODO: Sort out depreciation line, sort out color by country within group
 
 ggplot(country_tbl %>% 
          filter(model_type == "Classic") %>% 
@@ -328,14 +329,13 @@ plot_dat <- country_tbl %>%
          filter(club != "oil")
 
 plot_ly(plot_dat %>% 
-          group_by(country) %>% 
-          filter(country == 'United Kingdom'),
+          group_by(country),
         x = ~k,
         y = ~savings_curve,
         color = ~club,
         text = ~country) %>% 
   add_lines() %>% 
-  add_lines(y = ~depreciation_curve)
+  add_markers(y = ~depreciation_curve/100)
 
 
 plot_ly(plot_dat %>% 
