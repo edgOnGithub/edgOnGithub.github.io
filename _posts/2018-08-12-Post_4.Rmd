@@ -220,11 +220,11 @@ dropping oil as a little crazy and comparing
 
 ```{r}
 library(knitr)
-estimated_parameters_new <- estimated_parameters_new %>% 
+estimated_parameters_new_no_oil <- estimated_parameters_new %>% 
   filter(subset != 'Oil')
 
 
-comparison_tbl <- bind_rows(estimated_parameters_new %>%
+comparison_tbl <- bind_rows(estimated_parameters_new_no_oil %>%
                               select(model_type, subset, alpha, beta) %>%
                               mutate(type = 'New'),
                             estimated_parameters_old %>% select(model_type, subset, alpha, beta) %>% 
@@ -276,8 +276,18 @@ countries <- rep(MRW_clean$country, 51)
 country_tbl <- tibble('k' = k,
                       'country' = countries) %>% 
   left_join(y = MRW_clean %>% 
-              select(s, n_g_d, country), by = 'country') %>% 
-  mutate(saving_curve_)
+              select(s, n_g_d, country, club), by = 'country')
+
+
+estimated_parameters_new$club <- estimated_parameters_new$subset %>% 
+  gsub('Oil', 'oil', .) %>% 
+  gsub('Developing', 'developing_no_oil', .) %>% 
+  gsub('Intermediate', 'intermediate_no_oil', .) %>% 
+  gsub('Rich', 'rich', .)
+
+country_tbl <- left_join(country_tbl, estimated_parameters_new %>% 
+                           select(club, model_type, alpha, beta),
+                         by = 'club')
 
 
 find.saving.point <- function(k, alpha, s){
@@ -290,29 +300,26 @@ find.effective.depreciation <- function(k, n = 0, g = 0, d = 0){
   return(eff_depreciation)
 }
 
+country_tbl <- country_tbl %>% 
+  mutate(savings_curve = find.saving.point(k = k,
+                                           alpha = alpha,
+                                           s = s),
+         depreciation_curve = find.effective.depreciation(k = k,
+                                                          n = n_g_d))
+random_country <- sample(country_tbl$country, size = 1)
+ggplot(country_tbl %>% 
+         filter(model_type == "Classic") %>% 
+         filter(country == random_country), aes(k, savings_curve, group = country)) +
+  geom_line() +
+  ggtitle(random_country)
 
-s_uk <- MRW_clean %>% 
-  filter(country == "United Kingdom") %>% 
-  select(s)
-n_g_d_uk <- MRW_clean %>% 
-  filter(country == "United Kingdom") %>% 
-  select(n_g_d)
-alpha_uk <- 0.36
 
 
-
-savings <- k %>% 
-  map_df(find.saving.point,
-         alpha = alpha_uk,
-         s = s_uk)
-eff_dep <- k %>% 
-  map_df(find.effective.depreciation,
-         n = n_g_d_uk,
-         g = 0,
-         d = 0)
-
-plot_tbl <- bind_cols(eff_dep, savings)
-plot_tbl$k <- k
+ggplot(country_tbl %>% 
+         filter(model_type == "Classic") %>% 
+         filter(club != "oil"),
+       aes(k, savings_curve, group = country)) +
+  geom_line()
 
 
 ggplot(plot_tbl,
