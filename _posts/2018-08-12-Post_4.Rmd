@@ -270,8 +270,8 @@ subplot(p, q, nrows = 2, titleY = TRUE) %>%
 
 
 ```{r, modelling}
-k <- rep(seq(from = 0, to = 25, by = .5), nrow(MRW_clean))
-countries <- rep(MRW_clean$country, 51)
+k <- rep(seq(from = 0, to = 50, by = .5), nrow(MRW_clean))
+countries <- rep(MRW_clean$country, 50/0.5 + 1)
 
 country_tbl <- tibble('k' = k,
                       'country' = countries) %>% 
@@ -318,9 +318,33 @@ ggplot(country_tbl %>%
 ggplot(country_tbl %>% 
          filter(model_type == "Classic") %>% 
          filter(club != "oil"),
-       aes(k, savings_curve, group = country)) +
-  geom_line()
+       aes(k, savings_curve, group = country,
+           colour = club)) +
+  geom_line(size = 1) +
+  theme_minimal()
 
+plot_dat <- country_tbl %>% 
+         filter(model_type == "Classic") %>% 
+         filter(club != "oil")
+
+plot_ly(plot_dat %>% 
+          group_by(country) %>% 
+          filter(country == 'United Kingdom'),
+        x = ~k,
+        y = ~savings_curve,
+        color = ~club,
+        text = ~country) %>% 
+  add_lines() %>% 
+  add_lines(y = ~depreciation_curve)
+
+
+plot_ly(plot_dat %>% 
+          group_by(country),
+        x = ~k,
+        y = ~depreciation_curve,
+        color = ~club,
+        text = ~country) %>% 
+  add_lines()
 
 ggplot(plot_tbl,
        aes(x = k,
