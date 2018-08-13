@@ -8,16 +8,14 @@ editor_options:
   chunk_output_type: console
 ---
 
-I do XYZ.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE,
                       message = FALSE,
                       warning = FALSE)
 library(dplyr)
-MRW_clean <- readr::read_csv('assets/Transformed Data/MRW_clean_new_dummies.csv') %>% 
-  mutate(n_g_d = (working_age_pop_ch + 5)/ 100,
-         s = s / 100)
+library(knitr)
+MRW_clean <- readr::read_csv('assets/Transformed Data/MRW_clean_new_dummies.csv') 
 library(broom)
 collect.results <- function(models, names){
   
@@ -64,9 +62,13 @@ plot_new_vs_old <- function(term_type, data, std_error = FALSE ){
   return(pq)
 }
 ```
+In this post we're going to visualise countries' saving and depreciation curves, derived from the Solow and Augmented Solow model, using Mankiw, Romer and Weil's dataset on economic growth with the help of [Plotly](https://plot.ly/r/) and [Crosstalk](https://rstudio.github.io/crosstalk/).
 
+## Calculating alpha and beta
 
-Running the restricted regressions.
+First, we need to estimate the model to derive empirical estimates of $\alpha$ and $\beta$. MRW calculate both parameters using both a restrict and un-restricted model but choose to stick with the restricted parameter estimates so we do the same.
+
+Running the restricted regressions just involves subtracting our previous regressors from each other. Here, we use `sym` and `!!` to ensure the quasiquotation `filter` expects works (this is analagous to the more lengthy version we used before where we'd code each model separately):
 ```{r, table_1}
 library(purrr)
 library(tidyr)
@@ -74,22 +76,17 @@ library(tidyr)
 MRW_clean_restricted <- MRW_clean %>% 
   mutate(restricted_regressor = log(s) - log(n_g_d))
 restricted_models_old <- c('N',
-                      'I',
-                      'O') %>% 
+                           'I',
+                           'O') %>% 
   map(sym) %>% 
   map(~filter(MRW_clean_restricted, !!. == 1)) %>% 
   map(~lm(log(`1985`) ~ restricted_regressor,
-                       data = .)) 
-
-
-
+                       data = .))
 ```
 
 
-Collecting results and calculating alpha. Then do same for augmented model.
+Now, we collect results using `collect.results` defined previously and repeat the above for the Augmented model.
 ```{r}
-  
-
 restricted_model_results_old <- restricted_models_old %>% 
   collect.results(., names = c("OECD Restricted Classic",
                                "Intermediate Restricted Classic",
@@ -99,6 +96,7 @@ calculate.alpha <- function(estimate){
   alpha <- estimate / (1 + estimate)
   return(alpha)
 }
+
 restricted_model_results_old <- restricted_model_results_old %>% 
   mutate(alpha = ifelse((term == 'restricted_regressor'), calculate.alpha(estimate), NA))
 
@@ -107,8 +105,8 @@ MRW_augmented_restricted <- MRW_clean_restricted %>%
   mutate(restricted_regressor_hc = log(school / 100) - log(n_g_d))
 
 augmented_restricted_model_old <- c("O",
-                                "I",
-                                "N") %>% 
+                                    "I",
+                                    "N") %>% 
   map(sym) %>% 
   map(~filter(MRW_augmented_restricted, !!. == 1)) %>% 
   map(~lm(log(`1985`) ~ restricted_regressor + restricted_regressor_hc,
@@ -117,7 +115,14 @@ augmented_restricted_model_old <- c("O",
                                "Intermediate Restricted Augmented",
                                "Non-Oil Restricted Augmented"))
 
+```
 
+
+
+Calculating $\alpha$ for the classical Solow model was a pretty simple affair as we know that the regression coefficient is equal to $\frac{\alpha}{1-\alpha}$. The Augmented model is a little trickier since we're solving a set of simultaeneous equations. However, the equations describing $\alpha$ and $\beta$ are symmetric so we can just swap round `y` and `x` in the `mutate` function. 
+
+We use `spread` here because we want each estimated coefficient to have its own column - an alternative would be to use some form of `apply` across rows.
+```{r}
 find.param <- function(y, x){
   param <- (x*y) / (x + x^2 + x*y)
   return(param)
@@ -138,24 +143,23 @@ classic_parameters <- restricted_model_results_old %>%
   drop_na() %>% 
   mutate(alpha = round(alpha, 2))
 
-classic_parameters
-augmented_parameters
-
 estimated_parameters_old <- bind_rows(classic_parameters,
                                   augmented_parameters) %>% 
   separate(subset, c("subset",
                      "estimation_type",
                      "model_type"),
            sep = " ")
-estimated_parameters_old
+estimated_parameters_old  %>% kable
 ```
 
 
+One of the drawbacks of MRW's data partitioning discussed previously is that countries aren't partitioned into mutually exclusive groups. This is a bit of a pain because it means we effectively have multiple $\alpha$s and $\beta$s for any country which is in more than one group. For instance, the United Kingdom is included in every category by MRW so should we calculate its saving curve with an $\alpha$ of 0.6, 0.59 or 0.36?
 
-now comparing with new subset estimates
+To overcome this we can return to the mutually exclusive partitions we created [previously](https://edgongithub.github.io/2018-07-31/Clustering-Mankiw-Romer-Weil-EEG) when we explored clustering the dataset. 
+
+Therefore, we repeat the above but with our new 'club' factor. In hindsight, using more functions would have been a lot quicker here:
 
 ```{r}
-
 
 classic_parameters_new <- c("oil",
                            "developing_no_oil",
@@ -169,9 +173,6 @@ classic_parameters_new <- c("oil",
                                "Intermediate Restricted Classic",
                                "Rich Restricted Classic")) %>% 
   mutate(alpha = ifelse((term == 'restricted_regressor'), calculate.alpha(estimate), NA))
-
-
-
 
 augmented_parameters_new <- c("oil",
                            "developing_no_oil",
@@ -193,16 +194,10 @@ augmented_parameters_new <- c("oil",
          beta = round(beta, 2)) %>% 
   select(subset, alpha, beta)
 
-
-
-###
 classic_parameters_new <- classic_parameters_new %>% 
   select(subset, alpha) %>% 
   drop_na() %>% 
   mutate(alpha = round(alpha, 2))
-
-classic_parameters_new
-augmented_parameters_new
 
 estimated_parameters_new <- bind_rows(classic_parameters_new,
                                   augmented_parameters_new) %>% 
@@ -210,38 +205,31 @@ estimated_parameters_new <- bind_rows(classic_parameters_new,
                      "estimation_type",
                      "model_type"),
            sep = " ")
-estimated_parameters_new
+estimated_parameters_new %>% kable
 
 ```
 
-
-
-dropping oil as a little crazy and comparing
+Next, we run a quick sanity check by comparing the estimates. It seems like dropping `Oil` is a good idea as these give pretty crazy results (somewhat predictably). Whilst the estimates aren't identical they are in the same ballpark which is good enough for me:
 
 ```{r}
-library(knitr)
 estimated_parameters_new_no_oil <- estimated_parameters_new %>% 
   filter(subset != 'Oil')
-
-
 comparison_tbl <- bind_rows(estimated_parameters_new_no_oil %>%
                               select(model_type, subset, alpha, beta) %>%
                               mutate(type = 'New'),
                             estimated_parameters_old %>% select(model_type, subset, alpha, beta) %>% 
                               mutate(subset = paste0(subset, ' MRW'),
                                      type = 'Original')) 
-
 comparison_tbl %>%
   head %>% 
   kable
 ```
 
 
-plotting alpha and beta
+Visualising the differences using Plotly and `plot_new_vs_old` which we also defined in a previous post:^[I can't figure out why the bar widths refuse to match but suspect it's something to do with the NA values in the $\beta$ column.]
 
 ```{r}
 library(plotly)
-library(forcats)
 comparison_plot <- comparison_tbl %>% 
   gather(term, estimate, alpha, beta)
 
@@ -254,29 +242,30 @@ comparison_plot$subset <- factor(comparison_plot$subset,
                                             'OECD MRW'),
                                  ordered = TRUE)
 
-
 p <- plot_new_vs_old('alpha', comparison_plot)
-
 q <- plot_new_vs_old('beta', comparison_plot) 
-
-
 subplot(p, q, nrows = 2, titleY = TRUE) %>% 
   layout(showlegend = FALSE,
          title = 'Calculating alpha and beta with new and old partitions')
-
-
 ```
 
+## Plotting Savings and Depreciation
 
+Now that we have estimated our $\alpha$ and $\beta$ parameters we can generate the necessary curves.
+
+The 
 
 ```{r, modelling}
-k <- rep(seq(from = 0, to = 50, by = .5), nrow(MRW_clean))
-countries <- rep(MRW_clean$country, 50/0.5 + 1)
+library(crosstalk)
+library(DT)
+
+k <- rep(seq(from = 0, to = 20, by = .5), nrow(MRW_clean))
+countries <- rep(MRW_clean$country, 20/0.5 + 1)
 
 country_tbl <- tibble('k' = k,
                       'country' = countries) %>% 
   left_join(y = MRW_clean %>% 
-              select(s, n_g_d, country, club), by = 'country')
+              select(`1985`, s, n_g_d, country, club), by = 'country')
 
 
 estimated_parameters_new$club <- estimated_parameters_new$subset %>% 
@@ -305,121 +294,95 @@ country_tbl <- country_tbl %>%
                                            alpha = alpha,
                                            s = s),
          depreciation_curve = find.effective.depreciation(k = k,
-                                                          n = n_g_d))
-random_country <- sample(country_tbl$country, size = 1)
-ggplot(country_tbl %>% 
-         filter(model_type == "Classic") %>% 
-         filter(country == random_country), aes(k, savings_curve, group = country)) +
-  geom_line() +
-  geom_line(aes(k, depreciation_curve/100)) +
-  ggtitle(random_country)
+                                                          n = n_g_d),
+         k_star = (s / n_g_d) ^ (1 / (1 - alpha)),
+         s_star = find.saving.point(k = k_star,
+                                    alpha = alpha,
+                                    s = s))
+```
 
-## TODO: Sort out depreciation line, sort out color by country within group
-
-ggplot(country_tbl %>% 
-         filter(model_type == "Classic") %>% 
-         filter(club != "oil"),
-       aes(k, savings_curve, group = country,
-           colour = club)) +
-  geom_line(size = 1) +
-  theme_minimal()
+```{r}
 
 plot_dat <- country_tbl %>% 
          filter(model_type == "Classic") %>% 
          filter(club != "oil")
 
-plot_ly(plot_dat %>% 
-          group_by(country),
-        x = ~k,
-        y = ~savings_curve,
-        color = ~club,
-        text = ~country) %>% 
-  add_lines() %>% 
-  add_markers(y = ~depreciation_curve/100)
+plot_dat <- SharedData$new(plot_dat, ~country, group = "Choose a Country:")
 
 
-plot_ly(plot_dat %>% 
-          group_by(country),
-        x = ~k,
-        y = ~depreciation_curve,
-        color = ~club,
-        text = ~country) %>% 
-  add_lines()
-
-ggplot(plot_tbl,
-       aes(x = k,
-           y = s)) +
-  geom_point() +
-  geom_point(aes(k, n_g_d)) +
-  geom_point(aes(k_star$s, find.saving.point(k_star,
-                                           alpha_uk,
-                                           s_uk)$s),
-             colour = 'red')
-
-
-
-
-
-
-library(plotly)
-
-
-
-
-uk_k_t <- tibble(time = seq(from = 0, to = 100, by = 1))
-init_k <- 0
-
-k_star <- (s_uk / n_g_d_uk) ^ (1 / (1 - alpha_uk))
-
-k <- calculate.k.t.1(k = 1,
-           s = s_uk,
-           n = n_g_d_uk,
-           g = 0,
-           d = 0,
-           alpha = alpha_uk)
-init_matrix <- matrix(nrow = 100, ncol = 4)
-init_matrix[1:100, 1] <- c(seq(from = 1, to = 100, by = 1))
-for (i in 1:100){
-  k <- calculate.k.t.1(k = k[[3]],
-           s = s_uk,
-           n = n_g_d_uk,
-           g = 0,
-           d = 0,
-           alpha = alpha_uk)
-  init_matrix[i, 2:4] <- k %>% unlist()
-
-
-}
-
-k_tbl <- init_matrix %>% as_tibble()
-colnames(k_tbl) <- c("time",
-                     "savings",
-                     "effective_depreciation",
-                     "k_t_1")
-k_tbl <- k_tbl %>% 
-  mutate(k_t = lag(k_t_1))
-library(ggplot2)
-ggplot(k_tbl,
-       aes(k_t, k_t_1)) +
-  geom_point() +
-  geom_point(aes(k_t, savings))
+p <- ggplot(plot_dat,
+            aes(k,
+                savings_curve,
+                color = country,
+                text = country)) +
+  geom_line() +
+  theme_minimal() +
+  facet_wrap(~club)
+q <- p %>% 
+  ggplotly(tooltip = "text") %>%   
+  highlight(on = "plotly_click",
+            persistent = TRUE,
+            selectize = TRUE,
+            defaultValues = c("United Kingdom",
+                              "Angola",
+                              "Brazil"),
+            opacity = 0.1) %>% 
+  layout(showlegend = FALSE)
+q
 
 
 ```
 
 
-```{r, stargazer, results='asis'}
-library(latex2exp)
-restricted_models %>% 
-    stargazer::stargazer(type = 'html',
-                       column.labels = c("Non-Oil",
-                                         "Intermediate",
-                                         "OECD"),
-                       digits = 2,
-                       omit.stat = "f",
-                       df = FALSE,
-                       covariate.labels = c("ln(I/Y) - ln(n + g + d)",
-                                            "CONSTANT"),
-                       add.lines = list(c("Implied alpha", classic_parameters$alpha)))
+Now we add depreciation curves and markers for optimal saving and capital
+```{r dep_plot}
+
+## Now adding depreciation curves and markers
+p_dep <- p +
+  geom_line(aes(k, depreciation_curve)) +
+  geom_point(aes(k_star, s_star))
+
+q <- p_dep %>% 
+  ggplotly(tooltip = "text") %>%   
+  highlight(on = "plotly_click",
+            persistent = TRUE,
+            selectize = TRUE,
+            defaultValues = c("United Kingdom",
+                              "Angola",
+                              "Brazil"),
+            opacity = 0.1) %>% 
+  layout(showlegend = FALSE)
+q
+  
+
+```
+
+
+Adding just dep points
+
+```{r}
+plot_dat <- country_tbl %>% 
+         filter(model_type == "Classic") %>% 
+         filter(club != "oil") %>% 
+         select(country, k_star, s_star, club) %>% 
+         distinct()
+
+plot_dat <- SharedData$new(plot_dat, ~country, group = "Choose a Country:")
+p <- ggplot(plot_dat,
+            aes(k_star, s_star, color = country, text = country)) +
+  geom_point() +
+  facet_wrap(~club) +
+  theme_minimal()
+q <- p %>% 
+  ggplotly(tooltip = "text") %>%   
+  highlight(on = "plotly_click",
+            persistent = TRUE,
+            selectize = TRUE,
+            defaultValues = c("United Kingdom",
+                              "Angola",
+                              "Brazil"),
+            opacity = 0.3) %>% 
+  layout(showlegend = FALSE)
+q
 ```
 
