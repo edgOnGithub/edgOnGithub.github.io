@@ -249,15 +249,16 @@ subplot(p, q, nrows = 2, titleY = TRUE) %>%
          title = 'Calculating alpha and beta with new and old partitions')
 ```
 
-## Plotting Savings and Depreciation
+## Plotting saving and depreciation curves
 
-Now that we have estimated our $\alpha$ and $\beta$ parameters we can generate the necessary curves.
+Now that we have estimated our $\alpha$ and $\beta$ parameters, we can generate the necessary curves.
 
-The 
+First, we create a vector of capital levels, $k$, for each country and use `left_join` to include country specific variables such as `s` and `n_g_d`. Next, we use `gsub` to reformat the `club` factor entries so that we can perform another left join and add our estimated $\alpha$s and $\beta$s to the relevant countries depending on which 'club' they're in.
+
+Finally, we calculate the savings curve using the formula $sk^\alpha$ and effective depreciation curve $(n + g + d)k$. As a (limited) test to ensure we've done everything correctly we calculate $k^*$ and $s^*$, the steady state levels of capital accumulation and corresponding savings curve point, which should hopefully correspond to where a country's saving and depreciation curve meet.   
 
 ```{r, modelling}
-library(crosstalk)
-library(DT)
+
 
 k <- rep(seq(from = 0, to = 20, by = .5), nrow(MRW_clean))
 countries <- rep(MRW_clean$country, 20/0.5 + 1)
@@ -299,10 +300,17 @@ country_tbl <- country_tbl %>%
          s_star = find.saving.point(k = k_star,
                                     alpha = alpha,
                                     s = s))
+country_tbl %>% 
+  sample(5) %>% 
+  kable
 ```
 
-```{r}
+We now have all the information we need to plot each countries' curves. To demonstrate the difference between subsets we use `facet_wrap(~club)`. The crosstalk library lets us highlight individual countries within a plot and compare across multiple plots throughout the post.
 
+First, the classic Solow model savings curves:
+
+```{r}
+library(crosstalk)
 plot_dat <- country_tbl %>% 
          filter(model_type == "Classic") %>% 
          filter(club != "oil")
@@ -329,12 +337,10 @@ q <- p %>%
             opacity = 0.1) %>% 
   layout(showlegend = FALSE)
 q
-
-
 ```
 
 
-Now we add depreciation curves and markers for optimal saving and capital
+Now, we add depreciation curves as well as markers for $k^*$ and $s^*$:
 ```{r dep_plot}
 
 ## Now adding depreciation curves and markers
@@ -358,7 +364,7 @@ q
 ```
 
 
-Adding just dep points
+The above plot is a little messy, so here we just show the curves' intersection:
 
 ```{r}
 plot_dat <- country_tbl %>% 
