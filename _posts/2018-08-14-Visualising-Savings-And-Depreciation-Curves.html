@@ -2136,9 +2136,17 @@ code span.st { color: #bf0303; } /* String */
 code span.va { color: #0057ae; } /* Variable */
 code span.vs { color: #bf0303; } /* VerbatimString */
 code span.wa { color: #bf0303; } /* Warning */
-div.sourceCode {
-  overflow-x: visible;
+
+.sourceCode .row {
+  width: 100%;
 }
+.sourceCode {
+  overflow-x: auto;
+}
+.code-folding-btn {
+  margin-right: -30px;
+}
+
 </style>
 <style type="text/css">
   pre:not([class]) {
@@ -2209,9 +2217,70 @@ button.code-folding-btn:focus {
 <div class="container-fluid main-container">
 
 <!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
 <script>
 $(document).ready(function () {
   window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open')
+  });
 });
 </script>
 
@@ -2224,7 +2293,6 @@ $(document).ready(function () {
   window.initializeCodeFolding("show" === "show");
 });
 </script>
-
 
 
 
@@ -2583,8 +2651,8 @@ $(document).ready(function () {
 <a class="sourceLine" id="cb6-21" data-line-number="21"></a>
 <a class="sourceLine" id="cb6-22" data-line-number="22"></a>
 <a class="sourceLine" id="cb6-23" data-line-number="23">p</a></code></pre></div>
-<div id="htmlwidget-89ee7cc4d0c338d91782" style="width:672px;height:480px;" class="plotly html-widget"></div>
-<script type="application/json" data-for="htmlwidget-89ee7cc4d0c338d91782">{"x":{"data":[{"x":["Rich"],"y":[0.36],"type":"bar","name":"Rich","marker":{"color":"rgba(42,120,142,1)","line":{"color":"rgba(42,120,142,1)"}},"textfont":{"color":"rgba(42,120,142,1)"},"error_y":{"color":"rgba(42,120,142,1)"},"error_x":{"color":"rgba(42,120,142,1)"},"xaxis":"x","yaxis":"y","frame":null},{"x":["Intermediate"],"y":[0.52],"type":"bar","name":"Intermediate","marker":{"color":"rgba(65,68,135,1)","line":{"color":"rgba(65,68,135,1)"}},"textfont":{"color":"rgba(65,68,135,1)"},"error_y":{"color":"rgba(65,68,135,1)"},"error_x":{"color":"rgba(65,68,135,1)"},"xaxis":"x","yaxis":"y","frame":null},{"x":["Developing"],"y":[0.36],"type":"bar","name":"Developing","marker":{"color":"rgba(68,1,84,1)","line":{"color":"rgba(68,1,84,1)"}},"textfont":{"color":"rgba(68,1,84,1)"},"error_y":{"color":"rgba(68,1,84,1)"},"error_x":{"color":"rgba(68,1,84,1)"},"xaxis":"x","yaxis":"y","frame":null},{"x":["OECD MRW"],"y":[0.6],"type":"bar","name":"OECD MRW","marker":{"color":"rgba(153,153,153,1)","line":{"color":"rgba(153,153,153,1)"}},"textfont":{"color":"rgba(153,153,153,1)"},"error_y":{"color":"rgba(153,153,153,1)"},"error_x":{"color":"rgba(153,153,153,1)"},"xaxis":"x2","yaxis":"y","frame":null},{"x":["Intermediate MRW"],"y":[0.59],"type":"bar","name":"Intermediate MRW","marker":{"color":"rgba(200,102,100,1)","line":{"color":"rgba(200,102,100,1)"}},"textfont":{"color":"rgba(200,102,100,1)"},"error_y":{"color":"rgba(200,102,100,1)"},"error_x":{"color":"rgba(200,102,100,1)"},"xaxis":"x2","yaxis":"y","frame":null},{"x":["Non-Oil MRW"],"y":[0.36],"type":"bar","name":"Non-Oil MRW","marker":{"color":"rgba(255,231,41,1)","line":{"color":"rgba(255,231,41,1)"}},"textfont":{"color":"rgba(255,231,41,1)"},"error_y":{"color":"rgba(255,231,41,1)"},"error_x":{"color":"rgba(255,231,41,1)"},"xaxis":"x2","yaxis":"y","frame":null}],"layout":{"xaxis":{"domain":[0,0.48],"automargin":true,"title":"subset","type":"category","categoryorder":"array","categoryarray":["Developing","Intermediate","Rich","Non-Oil MRW","Intermediate MRW","OECD MRW"],"anchor":"y"},"xaxis2":{"domain":[0.52,1],"automargin":true,"title":"subset","type":"category","categoryorder":"array","categoryarray":["Developing","Intermediate","Rich","Non-Oil MRW","Intermediate MRW","OECD MRW"],"anchor":"y"},"yaxis":{"domain":[0,1],"automargin":true,"title":"alpha","anchor":"x"},"margin":{"b":40,"l":60,"t":25,"r":10},"hovermode":"closest","showlegend":false,"title":"Calculating alpha with new and old partitions, <br /> Classic Solow"},"attrs":{"4ca873686251":{"x":{},"y":{},"color":{},"alpha_stroke":1,"sizes":[10,100],"spans":[1,20],"type":"bar"},"4ca817df23fd":{"x":{},"y":{},"color":{},"colors":"Set1","alpha_stroke":1,"sizes":[10,100],"spans":[1,20],"type":"bar"}},"source":"A","config":{"modeBarButtonsToAdd":[{"name":"Collaborate","icon":{"width":1000,"ascent":500,"descent":-50,"path":"M487 375c7-10 9-23 5-36l-79-259c-3-12-11-23-22-31-11-8-22-12-35-12l-263 0c-15 0-29 5-43 15-13 10-23 23-28 37-5 13-5 25-1 37 0 0 0 3 1 7 1 5 1 8 1 11 0 2 0 4-1 6 0 3-1 5-1 6 1 2 2 4 3 6 1 2 2 4 4 6 2 3 4 5 5 7 5 7 9 16 13 26 4 10 7 19 9 26 0 2 0 5 0 9-1 4-1 6 0 8 0 2 2 5 4 8 3 3 5 5 5 7 4 6 8 15 12 26 4 11 7 19 7 26 1 1 0 4 0 9-1 4-1 7 0 8 1 2 3 5 6 8 4 4 6 6 6 7 4 5 8 13 13 24 4 11 7 20 7 28 1 1 0 4 0 7-1 3-1 6-1 7 0 2 1 4 3 6 1 1 3 4 5 6 2 3 3 5 5 6 1 2 3 5 4 9 2 3 3 7 5 10 1 3 2 6 4 10 2 4 4 7 6 9 2 3 4 5 7 7 3 2 7 3 11 3 3 0 8 0 13-1l0-1c7 2 12 2 14 2l218 0c14 0 25-5 32-16 8-10 10-23 6-37l-79-259c-7-22-13-37-20-43-7-7-19-10-37-10l-248 0c-5 0-9-2-11-5-2-3-2-7 0-12 4-13 18-20 41-20l264 0c5 0 10 2 16 5 5 3 8 6 10 11l85 282c2 5 2 10 2 17 7-3 13-7 17-13z m-304 0c-1-3-1-5 0-7 1-1 3-2 6-2l174 0c2 0 4 1 7 2 2 2 4 4 5 7l6 18c0 3 0 5-1 7-1 1-3 2-6 2l-173 0c-3 0-5-1-8-2-2-2-4-4-4-7z m-24-73c-1-3-1-5 0-7 2-2 3-2 6-2l174 0c2 0 5 0 7 2 3 2 4 4 5 7l6 18c1 2 0 5-1 6-1 2-3 3-5 3l-174 0c-3 0-5-1-7-3-3-1-4-4-5-6z"},"click":"function(gd) { \n        // is this being viewed in RStudio?\n        if (location.search == '?viewer_pane=1') {\n          alert('To learn about plotly for collaboration, visit:\\n https://cpsievert.github.io/plotly_book/plot-ly-for-collaboration.html');\n        } else {\n          window.open('https://cpsievert.github.io/plotly_book/plot-ly-for-collaboration.html', '_blank');\n        }\n      }"}],"cloud":false},"highlight":{"on":"plotly_click","persistent":false,"dynamic":false,"selectize":false,"opacityDim":0.2,"selected":{"opacity":1},"debounce":0},"subplot":true,"base_url":"https://plot.ly"},"evals":["config.modeBarButtonsToAdd.0.click"],"jsHooks":[]}</script>
+<div id="htmlwidget-a40278c13cf81202f369" style="width:672px;height:480px;" class="plotly html-widget"></div>
+<script type="application/json" data-for="htmlwidget-a40278c13cf81202f369">{"x":{"data":[{"x":["Rich"],"y":[0.36],"type":"bar","name":"Rich","marker":{"color":"rgba(42,120,142,1)","line":{"color":"rgba(42,120,142,1)"}},"textfont":{"color":"rgba(42,120,142,1)"},"error_y":{"color":"rgba(42,120,142,1)"},"error_x":{"color":"rgba(42,120,142,1)"},"xaxis":"x","yaxis":"y","frame":null},{"x":["Intermediate"],"y":[0.52],"type":"bar","name":"Intermediate","marker":{"color":"rgba(65,68,135,1)","line":{"color":"rgba(65,68,135,1)"}},"textfont":{"color":"rgba(65,68,135,1)"},"error_y":{"color":"rgba(65,68,135,1)"},"error_x":{"color":"rgba(65,68,135,1)"},"xaxis":"x","yaxis":"y","frame":null},{"x":["Developing"],"y":[0.36],"type":"bar","name":"Developing","marker":{"color":"rgba(68,1,84,1)","line":{"color":"rgba(68,1,84,1)"}},"textfont":{"color":"rgba(68,1,84,1)"},"error_y":{"color":"rgba(68,1,84,1)"},"error_x":{"color":"rgba(68,1,84,1)"},"xaxis":"x","yaxis":"y","frame":null},{"x":["OECD MRW"],"y":[0.6],"type":"bar","name":"OECD MRW","marker":{"color":"rgba(153,153,153,1)","line":{"color":"rgba(153,153,153,1)"}},"textfont":{"color":"rgba(153,153,153,1)"},"error_y":{"color":"rgba(153,153,153,1)"},"error_x":{"color":"rgba(153,153,153,1)"},"xaxis":"x2","yaxis":"y","frame":null},{"x":["Intermediate MRW"],"y":[0.59],"type":"bar","name":"Intermediate MRW","marker":{"color":"rgba(200,102,100,1)","line":{"color":"rgba(200,102,100,1)"}},"textfont":{"color":"rgba(200,102,100,1)"},"error_y":{"color":"rgba(200,102,100,1)"},"error_x":{"color":"rgba(200,102,100,1)"},"xaxis":"x2","yaxis":"y","frame":null},{"x":["Non-Oil MRW"],"y":[0.36],"type":"bar","name":"Non-Oil MRW","marker":{"color":"rgba(255,231,41,1)","line":{"color":"rgba(255,231,41,1)"}},"textfont":{"color":"rgba(255,231,41,1)"},"error_y":{"color":"rgba(255,231,41,1)"},"error_x":{"color":"rgba(255,231,41,1)"},"xaxis":"x2","yaxis":"y","frame":null}],"layout":{"xaxis":{"domain":[0,0.48],"automargin":true,"title":"subset","type":"category","categoryorder":"array","categoryarray":["Developing","Intermediate","Rich","Non-Oil MRW","Intermediate MRW","OECD MRW"],"anchor":"y"},"xaxis2":{"domain":[0.52,1],"automargin":true,"title":"subset","type":"category","categoryorder":"array","categoryarray":["Developing","Intermediate","Rich","Non-Oil MRW","Intermediate MRW","OECD MRW"],"anchor":"y"},"yaxis":{"domain":[0,1],"automargin":true,"title":"alpha","anchor":"x"},"margin":{"b":40,"l":60,"t":25,"r":10},"hovermode":"closest","showlegend":false,"title":"Calculating alpha with new and old partitions, <br /> Classic Solow"},"attrs":{"7403824514076":{"x":{},"y":{},"color":{},"alpha_stroke":1,"sizes":[10,100],"spans":[1,20],"type":"bar"},"740387565171a":{"x":{},"y":{},"color":{},"colors":"Set1","alpha_stroke":1,"sizes":[10,100],"spans":[1,20],"type":"bar"}},"source":"A","config":{"modeBarButtonsToAdd":[{"name":"Collaborate","icon":{"width":1000,"ascent":500,"descent":-50,"path":"M487 375c7-10 9-23 5-36l-79-259c-3-12-11-23-22-31-11-8-22-12-35-12l-263 0c-15 0-29 5-43 15-13 10-23 23-28 37-5 13-5 25-1 37 0 0 0 3 1 7 1 5 1 8 1 11 0 2 0 4-1 6 0 3-1 5-1 6 1 2 2 4 3 6 1 2 2 4 4 6 2 3 4 5 5 7 5 7 9 16 13 26 4 10 7 19 9 26 0 2 0 5 0 9-1 4-1 6 0 8 0 2 2 5 4 8 3 3 5 5 5 7 4 6 8 15 12 26 4 11 7 19 7 26 1 1 0 4 0 9-1 4-1 7 0 8 1 2 3 5 6 8 4 4 6 6 6 7 4 5 8 13 13 24 4 11 7 20 7 28 1 1 0 4 0 7-1 3-1 6-1 7 0 2 1 4 3 6 1 1 3 4 5 6 2 3 3 5 5 6 1 2 3 5 4 9 2 3 3 7 5 10 1 3 2 6 4 10 2 4 4 7 6 9 2 3 4 5 7 7 3 2 7 3 11 3 3 0 8 0 13-1l0-1c7 2 12 2 14 2l218 0c14 0 25-5 32-16 8-10 10-23 6-37l-79-259c-7-22-13-37-20-43-7-7-19-10-37-10l-248 0c-5 0-9-2-11-5-2-3-2-7 0-12 4-13 18-20 41-20l264 0c5 0 10 2 16 5 5 3 8 6 10 11l85 282c2 5 2 10 2 17 7-3 13-7 17-13z m-304 0c-1-3-1-5 0-7 1-1 3-2 6-2l174 0c2 0 4 1 7 2 2 2 4 4 5 7l6 18c0 3 0 5-1 7-1 1-3 2-6 2l-173 0c-3 0-5-1-8-2-2-2-4-4-4-7z m-24-73c-1-3-1-5 0-7 2-2 3-2 6-2l174 0c2 0 5 0 7 2 3 2 4 4 5 7l6 18c1 2 0 5-1 6-1 2-3 3-5 3l-174 0c-3 0-5-1-7-3-3-1-4-4-5-6z"},"click":"function(gd) { \n        // is this being viewed in RStudio?\n        if (location.search == '?viewer_pane=1') {\n          alert('To learn about plotly for collaboration, visit:\\n https://cpsievert.github.io/plotly_book/plot-ly-for-collaboration.html');\n        } else {\n          window.open('https://cpsievert.github.io/plotly_book/plot-ly-for-collaboration.html', '_blank');\n        }\n      }"}],"cloud":false},"highlight":{"on":"plotly_click","persistent":false,"dynamic":false,"selectize":false,"opacityDim":0.2,"selected":{"opacity":1},"debounce":0},"subplot":true,"base_url":"https://plot.ly"},"evals":["config.modeBarButtonsToAdd.0.click"],"jsHooks":[]}</script>
 <p>The <span class="math inline">\(\alpha\)</span> estimates are pretty different to MRW’s original results which is a little surprising considering the underlying regression estimates seemed to be quite similar when we plotted them in the last post. Furthermore, differentiating the <span class="math inline">\(\alpha\)</span> formula with respect to <span class="math inline">\(x\)</span>, our regression estimates, gives us <span class="math inline">\(\frac{1}{(1+x)^2}\)</span> which suggests that <span class="math inline">\(\alpha\)</span> is less sensitive to any given change in <span class="math inline">\(x\)</span> than <span class="math inline">\(x\)</span> itself i.e. <span class="math display">\[1 \geq\frac{1}{(1+x)^2} \quad \forall \space  x\]</span></p>
 <p>This could be because the restricted regression set-up we’re employing effectively compounds all the estimated coefficient differences into one parameter.</p>
 <p>Moving onto the Augmented model and the estimates begin to look similar to Mankiw, Romer and Weil’s:</p>
