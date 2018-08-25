@@ -62,14 +62,14 @@ plot_new_vs_old <- function(term_type, data, std_error = FALSE ){
   return(pq)
 }
 ```
-In this post we continue our Mankiw, Romer and Weil marathon by visualising countries' saving and depreciation curves, derived from the Solow and Augmented Solow model, using MRW's dataset on economic growth with the help of Plotly and Crosstalk.
+In this post we continue our Mankiw, Romer and Weil marathon by visualising countries' saving and depreciation curves, derived from the Solow and Augmented Solow model, using MRW's dataset on economic growth with the help of [Plotly](https://plot.ly/r/) and [Crosstalk](https://rstudio.github.io/crosstalk/).
 
 ## Calculating alpha and beta
 
 First, we need to estimate the model to derive empirical estimates of $\alpha$ and $\beta$. MRW calculate both parameters using both a restrict and un-restricted model but choose to stick with the restricted parameter estimates so we do the same.
 
 Running the restricted regressions just involves subtracting our previous regressors from each other. Here, we use `sym` and `!!` to ensure the quasiquotation `filter` expects works (this is analogous to the more lengthy version we used before where we'd code each model separately):
-```{r table_1}
+```{r, table_1}
 library(purrr)
 library(tidyr)
 
@@ -86,7 +86,7 @@ restricted_models_old <- c('N',
 
 
 Now, we collect results using `collect.results` defined previously and repeat the above for the Augmented model.
-```{r collect_mods}
+```{r}
 restricted_model_results_old <- restricted_models_old %>% 
   collect.results(., names = c("OECD Restricted Classic",
                                "Intermediate Restricted Classic",
@@ -122,7 +122,7 @@ augmented_restricted_model_old <- c("O",
 Calculating $\alpha$ for the classical Solow model was a pretty simple affair as we know that the regression coefficient is equal to $\frac{\alpha}{1-\alpha}$. The Augmented model is a little trickier since we're solving a set of simultaneous equations. However, the equations describing $\alpha$ and $\beta$ are symmetric so we can just swap round `y` and `x` in the `mutate` function. 
 
 We use `spread` here because we want each estimated coefficient to have its own column - an alternative would be to use some form of `apply` across rows.
-```{r find_param}
+```{r}
 find.param <- function(y, x){
   param <- (x*y) / (x + x^2 + x*y)
   return(param)
@@ -159,7 +159,7 @@ To overcome this we can return to the mutually exclusive partitions we created [
 
 Therefore, we repeat the above but with our new 'club' factor. In hindsight, using more functions would have been a lot quicker here:
 
-```{r classic_param}
+```{r}
 classic_parameters_new <- c("oil",
                            "developing_no_oil",
                            "intermediate_no_oil",
@@ -210,7 +210,7 @@ estimated_parameters_new %>% kable(digits = 2)
 
 Next, we run a quick sanity check by comparing the estimates. It seems like dropping `Oil` is a good idea as these give pretty crazy results (somewhat predictably).
 
-```{r new_param}
+```{r}
 estimated_parameters_new_no_oil <- estimated_parameters_new %>% 
   filter(subset != 'Oil')
 comparison_tbl <- bind_rows(estimated_parameters_new_no_oil %>%
@@ -228,29 +228,33 @@ comparison_tbl %>%
 
 We can visualise the differences using Plotly and `plot_new_vs_old` which we also defined in a previous post:
 
-```{r plotly_stuff, eval = TRUE}
-library(ggplot2)
+```{r}
 library(plotly)
 comparison_plot_classic <- comparison_tbl %>% 
   filter(model_type == 'Classic') %>% 
   gather(term, estimate, alpha, beta)
 
-
-comparison_plot_classic$subset <- factor(comparison_plot_classic$subset,
-                                 levels = c('Developing',
-                                            'Intermediate',
-                                            'Rich',
-                                            'Non-Oil MRW',
-                                            'Intermediate MRW',
-                                            'OECD MRW'),
-                                 ordered = TRUE)
+plot_alpha_beta <- function(data, beta = FALSE){
+  data$subset <- factor(data$subset,
+                                   levels = c('Developing',
+                                              'Intermediate',
+                                              'Rich',
+                                              'Non-Oil MRW',
+                                              'Intermediate MRW',
+                                              'OECD MRW'),
+                                   ordered = TRUE)
   
-p <- plot_new_vs_old('alpha', comparison_plot_classic) %>%
+  p <- plot_new_vs_old('alpha', data)
+  if (beta == TRUE){
+    q <- plot_new_vs_old('beta', data)
+    p <- subplot(p, q, nrows = 2, titleY = TRUE)
+  }
+   return(p)
+}
+
+p <- plot_alpha_beta(comparison_plot_classic) %>% 
   layout(showlegend = FALSE,
          title = 'Calculating alpha with new and old partitions, \n Classic Solow')
-
-
-
 p
 ```
 
@@ -260,17 +264,11 @@ The $\alpha$ estimates are pretty different to MRW's original results which is a
  
  Moving onto the Augmented model and the estimates begin to look similar to Mankiw, Romer and Weil's:
 
-```{r comp_aug, eval = FALSE}
+```{r}
 comparison_plot_augmented <- comparison_tbl %>% 
   filter(model_type == 'Augmented') %>% 
   gather(term, estimate, alpha, beta)
 
-
-##
-
-q <- plot_new_vs_old('beta', comparison_plot_classic)
-subplot(p, q, nrows = 2, titleY = TRUE)
-##
 p <- plot_alpha_beta(comparison_plot_augmented, beta = TRUE) %>% 
   layout(showlegend = FALSE,
          title = 'Calculating alpha and beta with new and old partitions, \n Augmented Solow')
@@ -286,7 +284,7 @@ First, we create a vector of capital levels, $k$, for each country and use `left
 
 Finally, we calculate the savings curve using the formula $sk^\alpha$ and effective depreciation curve $(n + g + d)k$. As a (limited) test to ensure we've done everything correctly we calculate $k^*$ and $s^*$, the steady state levels of capital accumulation and corresponding savings curve point, which should hopefully correspond to where a country's saving and depreciation curve meet.   
 
-```{r modelling, eval = FALSE}
+```{r, modelling}
 k <- rep(seq(from = 0, to = 20, by = .5), nrow(MRW_clean))
 countries <- rep(MRW_clean$country, 20/0.5 + 1)
 
@@ -333,3 +331,151 @@ country_tbl %>%
 We now have all the information we need to plot each countries' curves. To demonstrate the difference between subsets we use `facet_wrap(~club)`. The Crosstalk library lets us highlight individual countries within a plot and compare across multiple plots throughout the post.
 
 First, the classic Solow model savings curves:
+
+```{r}
+library(crosstalk)
+plot_dat <- country_tbl %>% 
+         filter(model_type == "Classic") %>% 
+         filter(club != "oil")
+
+plot_dat <- SharedData$new(plot_dat, ~country, group = "Choose a Country:")
+
+p <- ggplot(plot_dat,
+            aes(k,
+                savings_curve,
+                color = country,
+                text = country)) +
+  geom_line() +
+  theme_minimal() +
+  facet_wrap(~club)
+q <- p %>% 
+  ggplotly(tooltip = "text") %>%   
+  highlight(on = "plotly_click",
+            persistent = TRUE,
+            selectize = TRUE,
+            defaultValues = c("United Kingdom",
+                              "Angola",
+                              "Brazil"),
+            opacity = 0.1) %>% 
+  layout(showlegend = FALSE)
+q
+```
+
+The differences between the rich, developing and intermediate savings curves demonstrate visually that the Solow model predicts conditional rather than unconditional convergence. The fact that intermediate countries' savings curves appear to be higher than the rich countries, whilst puzzling, is coherent with the Solow model.
+
+Now, we add depreciation curves as well as markers for $k^*$ and $s^*$:
+```{r dep_plot}
+## Now adding depreciation curves and markers
+p_dep <- p +
+  geom_line(aes(k, depreciation_curve)) +
+  geom_point(aes(k_star, s_star))
+
+q <- p_dep %>% 
+  ggplotly(tooltip = "text") %>%   
+  highlight(on = "plotly_click",
+            persistent = TRUE,
+            selectize = TRUE,
+            defaultValues = c("United Kingdom",
+                              "Angola",
+                              "Brazil"),
+            opacity = 0.1) %>% 
+  layout(showlegend = FALSE)
+q
+```
+
+
+The above plot is a little messy, so here we just show the curves' intersection:
+
+```{r}
+plot_dat <- country_tbl %>% 
+         filter(model_type == "Classic") %>% 
+         filter(club != "oil") %>% 
+         select(country, k_star, s_star, club) %>% 
+         distinct()
+
+plot_dat <- SharedData$new(plot_dat, ~country, group = "Choose a Country:")
+p <- ggplot(plot_dat,
+            aes(k_star, s_star, color = country, text = country)) +
+  geom_point() +
+  facet_wrap(~club) +
+  theme_minimal()
+q <- p %>% 
+  ggplotly(tooltip = "text") %>%   
+  highlight(on = "plotly_click",
+            persistent = TRUE,
+            selectize = TRUE,
+            defaultValues = c("United Kingdom",
+                              "Angola",
+                              "Brazil"),
+            opacity = 0.1) %>% 
+  layout(showlegend = FALSE)
+q
+```
+
+## Plotting augmented saving curves
+
+Now we can do the same but with the Augmented Solow model: 
+```{r augmented plots, echo=FALSE}
+plot_dat <- country_tbl %>% 
+         filter(model_type == "Augmented") %>% 
+         filter(club != "oil")
+
+plot_dat <- SharedData$new(plot_dat, ~country, group = "Choose a Country:")
+
+p <- ggplot(plot_dat,
+            aes(k,
+                savings_curve,
+                color = country,
+                text = country)) +
+  geom_line() +
+  theme_minimal() +
+  facet_wrap(~club)
+q <- p %>% 
+  ggplotly(tooltip = "text") %>%   
+  highlight(on = "plotly_click",
+            persistent = TRUE,
+            selectize = TRUE,
+            defaultValues = c("United Kingdom",
+                              "Angola",
+                              "Brazil"),
+            opacity = 0.1) %>% 
+  layout(showlegend = FALSE)
+q
+```
+
+
+Comparing the two together:
+```{r, echo=FALSE}
+plot_dat <- country_tbl %>% 
+         filter(club != "oil")
+
+plot_dat <- SharedData$new(plot_dat, ~country, group = "Choose a Country:")
+
+p <- ggplot(plot_dat,
+            aes(k,
+                savings_curve,
+                color = country,
+                text = country)) +
+  geom_line() +
+  theme_minimal() +
+  facet_grid(model_type ~ club)
+q <- p %>% 
+  ggplotly(tooltip = "text") %>%   
+  highlight(on = "plotly_click",
+            persistent = TRUE,
+            selectize = TRUE,
+            defaultValues = c("United Kingdom",
+                              "Angola",
+                              "Brazil"),
+            opacity = 0.1) %>% 
+  layout(showlegend = FALSE)
+q
+```
+
+This plot supports MRW's conclusion that human capital can help explain differences in income. The addition of `school` in the regression equation and therefore $\beta$ in the Augmented Solow model now means that rich countries' savings curves appear above the intermediate countries as we'd most likely expect. Furthermore, it seems like the poor countries have gotten poorer.
+
+## Conclusion
+
+We've plotted the savings and depreciation curves of the Solow and Augmented Solow model. Whilst the plots are interactive to a degree, thanks to Plotly and Crosstalk, it'd be interesting to allow users to input their own parameters for $\alpha$, $\beta$, $s$, $(n + g + d)$ - unfortunately this would require Shiny which I'm reluctant to use given GitHub Pages' static hosting.
+
+Again our visualisations and tweaks of MRW's original paper broadly reflect their own findings. Part I of this in depth MRW marathon can be found [here](https://edgongithub.github.io/2018-07-22/Empirics-of-Economic-Growth-Replicated-Revisited-One), followed by [Part II](https://edgongithub.github.io/2018-07-29/Empirics-of-Economic-Growth-Replicated-Revisited-Two) and [Part III.](https://edgongithub.github.io/2018-07-31/Clustering-Mankiw-Romer-Weil-EEG)
