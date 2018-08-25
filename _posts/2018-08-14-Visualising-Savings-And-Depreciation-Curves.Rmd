@@ -228,7 +228,7 @@ comparison_tbl %>%
 
 We can visualise the differences using Plotly and `plot_new_vs_old` which we also defined in a previous post:
 
-```{r}
+```{r, eval = FALSE}
 library(plotly)
 comparison_plot_classic <- comparison_tbl %>% 
   filter(model_type == 'Classic') %>% 
@@ -264,7 +264,7 @@ The $\alpha$ estimates are pretty different to MRW's original results which is a
  
  Moving onto the Augmented model and the estimates begin to look similar to Mankiw, Romer and Weil's:
 
-```{r}
+```{r, eval = FALSE}
 comparison_plot_augmented <- comparison_tbl %>% 
   filter(model_type == 'Augmented') %>% 
   gather(term, estimate, alpha, beta)
@@ -332,7 +332,7 @@ We now have all the information we need to plot each countries' curves. To demon
 
 First, the classic Solow model savings curves:
 
-```{r}
+```{r, eval = FALSE}
 library(crosstalk)
 plot_dat <- country_tbl %>% 
          filter(model_type == "Classic") %>% 
@@ -364,7 +364,7 @@ q
 The differences between the rich, developing and intermediate savings curves demonstrate visually that the Solow model predicts conditional rather than unconditional convergence. The fact that intermediate countries' savings curves appear to be higher than the rich countries, whilst puzzling, is coherent with the Solow model.
 
 Now, we add depreciation curves as well as markers for $k^*$ and $s^*$:
-```{r dep_plot}
+```{r dep_plot, eval = FALSE}
 ## Now adding depreciation curves and markers
 p_dep <- p +
   geom_line(aes(k, depreciation_curve)) +
@@ -386,7 +386,7 @@ q
 
 The above plot is a little messy, so here we just show the curves' intersection:
 
-```{r}
+```{r, eval = FALSE}
 plot_dat <- country_tbl %>% 
          filter(model_type == "Classic") %>% 
          filter(club != "oil") %>% 
@@ -415,7 +415,7 @@ q
 ## Plotting augmented saving curves
 
 Now we can do the same but with the Augmented Solow model: 
-```{r augmented plots, echo=FALSE}
+```{r augmented plots, echo=FALSE, eval = FALSE}
 plot_dat <- country_tbl %>% 
          filter(model_type == "Augmented") %>% 
          filter(club != "oil")
@@ -445,7 +445,7 @@ q
 
 
 Comparing the two together:
-```{r, echo=FALSE}
+```{r, echo=FALSE, eval = FALSE}
 plot_dat <- country_tbl %>% 
          filter(club != "oil")
 
