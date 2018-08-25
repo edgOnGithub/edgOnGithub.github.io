@@ -258,6 +258,8 @@ p <- plot_alpha_beta(comparison_plot_classic) %>%
 p
 ```
 
+<iframe width="900" height="800" frameborder="0" scrolling="no" src="//plot.ly/~edjee/23.embed"></iframe>
+
 The $\alpha$ estimates are pretty different to MRW's original results which is a little surprising considering the underlying regression estimates seemed to be quite similar when we plotted them in the last post. Furthermore, differentiating the $\alpha$ formula with respect to $x$, our regression estimates, gives us $\frac{1}{(1+x)^2}$ which suggests that $\alpha$ is less sensitive to any given change in $x$ than $x$ itself i.e. $$1 \geq\frac{1}{(1+x)^2} \quad \forall \space  x$$
  
  This could be because the restricted regression set-up we're employing effectively compounds all the estimated coefficient differences into one parameter.
@@ -275,6 +277,7 @@ p <- plot_alpha_beta(comparison_plot_augmented, beta = TRUE) %>%
 p
 ```
 
+<iframe width="900" height="800" frameborder="0" scrolling="no" src="//plot.ly/~edjee/25.embed"></iframe>
 
 ## Plotting classical saving and depreciation curves 
 
@@ -332,6 +335,8 @@ We now have all the information we need to plot each countries' curves. To demon
 
 First, the classic Solow model savings curves:
 
+[Edit: Plotly is having some issues with GitHub Pages' Liquid tags currently so I'm using an iframe workaround that doesn't allow for crosstalk's filter functionality so the plots below are quite messy.]
+
 ```{r, eval = FALSE}
 library(crosstalk)
 plot_dat <- country_tbl %>% 
@@ -361,6 +366,8 @@ q <- p %>%
 q
 ```
 
+<iframe width="900" height="800" frameborder="0" scrolling="no" src="//plot.ly/~edjee/27.embed"></iframe>
+
 The differences between the rich, developing and intermediate savings curves demonstrate visually that the Solow model predicts conditional rather than unconditional convergence. The fact that intermediate countries' savings curves appear to be higher than the rich countries, whilst puzzling, is coherent with the Solow model.
 
 Now, we add depreciation curves as well as markers for $k^*$ and $s^*$:
@@ -383,6 +390,7 @@ q <- p_dep %>%
 q
 ```
 
+<iframe width="900" height="800" frameborder="0" scrolling="no" src="//plot.ly/~edjee/29.embed"></iframe>
 
 The above plot is a little messy, so here we just show the curves' intersection:
 
@@ -411,6 +419,7 @@ q <- p %>%
   layout(showlegend = FALSE)
 q
 ```
+<iframe width="900" height="800" frameborder="0" scrolling="no" src="//plot.ly/~edjee/31.embed"></iframe>
 
 ## Plotting augmented saving curves
 
@@ -442,7 +451,7 @@ q <- p %>%
   layout(showlegend = FALSE)
 q
 ```
-
+<iframe width="900" height="800" frameborder="0" scrolling="no" src="//plot.ly/~edjee/33.embed"></iframe>
 
 Comparing the two together:
 ```{r, echo=FALSE, eval = FALSE}
@@ -471,7 +480,7 @@ q <- p %>%
   layout(showlegend = FALSE)
 q
 ```
-
+<iframe width="900" height="800" frameborder="0" scrolling="no" src="//plot.ly/~edjee/35.embed"></iframe>
 This plot supports MRW's conclusion that human capital can help explain differences in income. The addition of `school` in the regression equation and therefore $\beta$ in the Augmented Solow model now means that rich countries' savings curves appear above the intermediate countries as we'd most likely expect. Furthermore, it seems like the poor countries have gotten poorer.
 
 ## Conclusion
