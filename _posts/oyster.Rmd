@@ -1,0 +1,80 @@
+---
+output: 
+  html_document:
+    code_folding: show
+    highlight: kate
+    theme: paper
+editor_options:
+  chunk_output_type: console
+---
+
+```{r}
+library(readr)
+library(dplyr)
+library(skimr)
+oyster <- read_csv('assets/Original Data/Nov09JnyExport.csv') 
+oyster_underground <- oyster %>% 
+  filter(SubSystem == "LUL")
+rm(oyster)
+gc()
+
+oyster_underground_monday <- oyster_underground %>% 
+  filter(daytype == "Mon") %>% 
+  filter(StartStn != "Unstarted") %>% 
+  select(-downo, -daytype, -SubSystem)
+oyster_underground_monday %>% 
+  skim()
+oyster_underground_monday %>% 
+  head()
+```
+
+
+```{r}
+library(plotly)
+
+p <- plot_ly(oyster_underground_monday,
+             x = ~EntTimeHHMM %>% 
+               as.POSIXct(),
+             type = 'histogram')
+p
+
+q <- plot_ly(oyster_underground_monday %>% 
+               filter(ExTime > 200),
+             x = ~EXTimeHHMM %>% 
+               as.POSIXct(),
+             type = "histogram")
+q
+
+
+pq <- plot_ly(oyster_underground_monday %>% 
+                filter(ExTime > 200),
+              alpha = 0.4) %>% 
+  add_histogram(x = ~EntTimeHHMM %>% 
+                  as.POSIXct(),
+                name = "Tap in time") %>% 
+  add_histogram(x = ~EXTimeHHMM %>% 
+                  as.POSIXct(),
+                name = "Tap out time") %>% 
+  layout(barmode = "overlay",
+         xaxis = list(title = "Time"),
+         title = "Histogram of Tube Journeys on Monday")
+pq
+
+
+
+journey_time_plot <- plot_ly(oyster_underground_monday,
+                             x = ~EntTimeHHMM %>% 
+                               as.POSIXct(),
+                             y = ~(ExTimeHHMM - EntTimeHHMM),
+                             type = "scatter",
+                             mode = "markers")
+journey_time_plot
+```
+
+```{r}
+library(lubridate)
+oyster_underground_monday <- oyster_underground_monday %>% 
+  mutate(ed_time = hm(EntTimeHHMM))
+
+```
+
