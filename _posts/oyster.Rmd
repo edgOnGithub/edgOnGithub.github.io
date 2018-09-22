@@ -62,19 +62,30 @@ pq <- plot_ly(oyster_underground_monday %>%
          title = "Histogram of Tube Journeys on Monday")
 pq
 
-
-oyster_underground_monday <- oyster_underground_monday %>% 
-  mutate(journey_time = difftime(EXTimeHHMM, EntTimeHHMM, units = "mins")) %>% 
+library(lubridate)
+oyster_underground_monday_lubridate <- oyster_underground_monday %>% 
+  mutate(entry_datetime = EntTimeHHMM %>% 
+           as.POSIXct() %>% 
+           ymd_hms(),
+         exit_datetime = EXTimeHHMM %>% 
+           as.POSIXct() %>% 
+           ymd_hms(),
+         journey_time = interval(entry_datetime, exit_datetime) %>% 
+           time_length(unit = "minute")) %>% 
   filter(journey_time > 0)
 
-oyster_j_time <- oyster_underground_monday %>% 
-  group_by(EntTimeHHMM) %>% 
+oyster_j_time <- oyster_underground_monday_lubridate %>% 
+  group_by(entry_datetime) %>% 
   summarise(average_journey = mean(journey_time))
+
+oyster_j_time_5 <- oyster_j_time %>% 
+  mutate(five_min = round_date(entry_datetime, unit = "5 min")) %>% 
+  group_by(five_min) %>% 
+  summarise(average_journey_5 = mean(average_journey))
   
-journey_time_plot <- plot_ly(oyster_j_time,
-                             x = ~EntTimeHHMM %>% 
-                               as.POSIXct(),
-                             y = ~average_journey,
+journey_time_plot <- plot_ly(oyster_j_time_5,
+                             x = ~five_min,
+                             y = ~log(average_journey_5),
                              type = "scatter",
                              mode = "markers")
 journey_time_plot
