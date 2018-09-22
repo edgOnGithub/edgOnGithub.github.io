@@ -30,6 +30,8 @@ oyster_underground_monday %>%
 
 
 ```{r}
+
+
 library(plotly)
 
 p <- plot_ly(oyster_underground_monday,
@@ -61,11 +63,18 @@ pq <- plot_ly(oyster_underground_monday %>%
 pq
 
 
+oyster_underground_monday <- oyster_underground_monday %>% 
+  mutate(journey_time = difftime(EXTimeHHMM, EntTimeHHMM, units = "mins")) %>% 
+  filter(journey_time > 0)
 
-journey_time_plot <- plot_ly(oyster_underground_monday,
+oyster_j_time <- oyster_underground_monday %>% 
+  group_by(EntTimeHHMM) %>% 
+  summarise(average_journey = mean(journey_time))
+  
+journey_time_plot <- plot_ly(oyster_j_time,
                              x = ~EntTimeHHMM %>% 
                                as.POSIXct(),
-                             y = ~(ExTimeHHMM - EntTimeHHMM),
+                             y = ~average_journey,
                              type = "scatter",
                              mode = "markers")
 journey_time_plot
