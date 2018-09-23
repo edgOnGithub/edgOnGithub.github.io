@@ -86,33 +86,24 @@ oyster_j_time_5 <- oyster_j_time %>%
   group_by(five_min, daytype, downo) %>% 
   summarise(average_journey_5 = mean(average_journey))
   
-journey_time <- oyster_j_time_5 %>% 
-  mutate(id = as.integer(daytype))
 
-
-
-
-
-journey_time %>% 
+oyster_j_time_5 %>% 
   plot_ly(x = ~five_min,
           y = ~average_journey_5,
           colors = "Set2",
           color = ~daytype) %>% 
   add_markers()
-journey_time_plot
-
-
 
 library(ggplot2)
-journey_time$downo <- as.factor(journey_time$downo)
-levels(journey_time$downo) <- c("Sunday",
+oyster_j_time_5$downo <- as.factor(oyster_j_time_5$downo)
+levels(oyster_j_time_5$downo) <- c("Sunday",
                                 "Monday",
                                 "Tuesday",
                                 "Wednesday",
                                 "Thursday",
                                 "Friday",
                                 "Saturday")
-p <- ggplot(journey_time %>% 
+p <- ggplot(oyster_j_time_5 %>% 
               arrange(downo), aes(five_min, log(average_journey_5), color = daytype)) +
   geom_line() +
   facet_wrap(~downo, ncol = 1) +
@@ -121,14 +112,44 @@ p <- ggplot(journey_time %>%
 p %>% ggplotly
 
 
-oyster_underground_lubridate %>% 
+stations_data <- oyster_underground_lubridate %>% 
   group_by(StartStn, EndStation) %>% 
   summarise(n = n(),
             ave_time = mean(journey_time, na.rm = TRUE),
             FFare_mean = mean(FFare, na.rm = TRUE)) %>% 
   arrange(-n)
+
 ```
 
+```{r}
+library(tidygraph)
+stations_filtered <- stations_data %>%
+  filter(n > 200)
+stations_filtered
+oyster_graph <- as_tbl_graph(stations_filtered, directed  = FALSE)
+
+library(ggraph)
+
+
+ggraph(oyster_graph, layout = "linear", circular = TRUE) + 
+    geom_edge_arc(aes(width = n, color = n), alpha = 0.2) + 
+    guides(edge_width = 'none') +
+    geom_node_text(aes(label = name), size = 3, repel = FALSE) +
+    scale_color_brewer(palette = "Set1") +
+    theme_graph()
+
+
+ggraph(oyster_graph, layout = "fr") + 
+    geom_edge_fan(aes(width = n, color = n), alpha = 0.2,
+                  arrow = arrow(length = unit(4, 'mm')), 
+                   end_cap = circle(3, 'mm')) + 
+    guides(edge_width = 'none') +
+    geom_node_text(aes(label = name), size = 3, repel = FALSE) +
+    scale_color_brewer(palette = "Set1") +
+    theme_graph()
+
+
+```
 
 
 
