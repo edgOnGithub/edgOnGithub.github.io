@@ -8,10 +8,17 @@ editor_options:
   chunk_output_type: console
 ---
 
+Visualising London Underground data.
+
+
+## Cleaning Data
+
+First we select only London Underground data from TFL's transport CSV.
+
 ```{r}
 library(readr)
 library(dplyr)
-library(skimr)
+library(knitr)
 oyster <- read_csv('assets/Original Data/Nov09JnyExport.csv') 
 oyster_underground <- oyster %>% 
   filter(SubSystem == "LUL")
@@ -21,11 +28,21 @@ gc()
 oyster_underground <- oyster_underground %>% 
   filter(StartStn != "Unstarted") %>% 
   select(-SubSystem)
+
 oyster_underground %>% 
-  skim()
-oyster_underground %>% 
-  head()
+  head() %>% 
+  kable()
+
+
+
+
+
+
+```
+Next we encode `daytype` as a factor with levels running from Monday to Sunday.
+```{r}
 library(forcats)
+library(lubridate)
 oyster_underground$daytype <- factor(oyster_underground$daytype, c("Mon",
                                                                    "Tue",
                                                                    "Wed",
@@ -33,47 +50,8 @@ oyster_underground$daytype <- factor(oyster_underground$daytype, c("Mon",
                                                                    "Fri",
                                                                    "Sat",
                                                                    "Sun"))
-oyster_underground$downo
-```
 
 
-```{r}
-
-
-library(plotly)
-
-p <- plot_ly(oyster_underground %>% 
-               filter(daytype == "Mon"),
-             x = ~EntTimeHHMM %>% 
-               as.POSIXct(),
-             type = 'histogram')
-p
-
-q <- plot_ly(oyster_underground %>%
-               filter(daytype == "Mon") %>% 
-               filter(ExTime > 200),
-             x = ~EXTimeHHMM %>% 
-               as.POSIXct(),
-             type = "histogram")
-q
-
-
-pq <- plot_ly(oyster_underground %>%
-                filter(daytype == "Mon") %>% 
-                filter(ExTime > 200),
-              alpha = 0.4) %>% 
-  add_histogram(x = ~EntTimeHHMM %>% 
-                  as.POSIXct(),
-                name = "Tap in time") %>% 
-  add_histogram(x = ~EXTimeHHMM %>% 
-                  as.POSIXct(),
-                name = "Tap out time") %>% 
-  layout(barmode = "overlay",
-         xaxis = list(title = "Time"),
-         title = "Histogram of Tube Journeys on Monday")
-pq
-
-library(lubridate)
 oyster_underground_lubridate <- oyster_underground %>% 
   mutate(entry_datetime = EntTimeHHMM %>% 
            as.POSIXct() %>% 
@@ -84,6 +62,60 @@ oyster_underground_lubridate <- oyster_underground %>%
          journey_time = interval(entry_datetime, exit_datetime) %>% 
            time_length(unit = "minute")) %>% 
   filter(journey_time > 0)
+```
+
+
+
+## Initial Visualisations
+
+Using Plotly we can create histograms  
+```{r, fig.keep=TRUE}
+library(ggplot2)
+library(tidyr)
+p <- ggplot(oyster_underground_lubridate,
+            aes(x = EntTimeHHMM)) +
+  geom_histogram(fill = "firebrick2", binwidth = 600, alpha = 0.2) +
+  theme_minimal() +
+  xlab("Tap In Time") +
+  ggtitle("Tap In Time for London Tube Stations")
+p
+
+q <- ggplot(oyster_underground_lubridate,
+            aes(x = EXTimeHHMM)) +
+  geom_histogram(fill = "springgreen2", binwidth = 600) +
+  theme_minimal() +
+  ggtitle("Tap Out Time for London Tube Stations") +
+  xlab("Tap Out Time")
+q
+
+
+
+```
+
+
+Now we combine the two together in a density plot:
+
+```{r}
+
+pq <- oyster_underground_lubridate %>% 
+               select("Tap In" = EntTimeHHMM,"Tap Out" = EXTimeHHMM) %>%
+               gather(type, time, "Tap In", "Tap Out") %>% 
+  ggplot(aes(x = time, fill = type)) +
+  geom_density(alpha = 0.2) +
+  scale_fill_manual(values = c("firebrick2", "springgreen2"), "Type") +
+  xlab("Time") +
+  ggtitle("Tap In And Tap Out Time", subtitle = "London Tube Stations") +
+  theme_minimal()
+pq
+
+
+```
+
+
+
+```{r}
+
+
 
 oyster_j_time <- oyster_underground_lubridate %>% 
   group_by(entry_datetime, daytype, downo) %>% 
@@ -94,31 +126,44 @@ oyster_j_time_5 <- oyster_j_time %>%
   group_by(five_min, daytype, downo) %>% 
   summarise(average_journey_5 = mean(average_journey))
   
-
+library(RColorBrewer)
 oyster_j_time_5 %>% 
   plot_ly(x = ~five_min,
           y = ~average_journey_5,
-          colors = "Set2",
-          color = ~daytype) %>% 
-  add_markers()
+          colors = "Blues",
+          color = ~daytype,
+          mode = "markers",
+          type = "scatter",
+          marker = list(color = brewer.pal("Blues")))
 
-library(ggplot2)
-oyster_j_time_5$downo <- as.factor(oyster_j_time_5$downo)
-levels(oyster_j_time_5$downo) <- c("Sunday",
-                                "Monday",
-                                "Tuesday",
-                                "Wednesday",
-                                "Thursday",
-                                "Friday",
-                                "Saturday")
-p <- ggplot(oyster_j_time_5 %>% 
-              arrange(downo), aes(five_min, log(average_journey_5), color = daytype)) +
-  geom_line() +
-  facet_wrap(~downo, ncol = 1) +
+p <- oyster_j_time_5 %>% 
+  ggplot(aes(x = five_min,
+             y = average_journey_5,
+             colour = daytype)) +
+  geom_point() +
+  scale_color_brewer(palette = "OrRd", direction = -1, "Day") +
   theme_minimal() +
-  theme(legend.position = "none")
-p %>% ggplotly
+  xlab("Time") +
+  ggtitle("Mean Journey Length For a Given Start Time") +
+  ylim(0, 75) +
+  labs(subtitle = "Lighter colours indicate days later in the week")
+p
 
+q <- oyster_j_time_5 %>% 
+  ggplot(aes(x = five_min,
+             y = average_journey_5,
+             colour = daytype)) +
+  geom_smooth(se = FALSE, size = 2, linetype = "longdash") +
+  scale_color_brewer(palette = "OrRd", direction = -1, "Day") +
+  theme_minimal()
+q
+
+```
+
+
+
+
+```{r}
 
 stations_data <- oyster_underground_lubridate %>% 
   group_by(StartStn, EndStation) %>% 
@@ -127,47 +172,110 @@ stations_data <- oyster_underground_lubridate %>%
             FFare_mean = mean(FFare, na.rm = TRUE)) %>% 
   arrange(-n)
 
+
+
 ```
 
 ```{r}
 library(tidygraph)
-stations_filtered <- stations_data %>%
-  filter(n > 300)
-stations_filtered
-library(tidyr)
-
-
-oyster_graph <- as_tbl_graph(stations_filtered, directed  = FALSE)
-
 library(ggraph)
+stations_filtered <- stations_data %>%
+  ungroup() %>% 
+  top_n(wt = n, 15) %>% 
+  select(StartStn, EndStation) %>% 
+  gather(type, station) %>% 
+  select(station)
 
 
+stations_filtered
+
+station_data_filtered <- stations_data %>% 
+  mutate(x = rnorm(n())) %>% 
+  arrange(x) %>% 
+  filter((StartStn %in% stations_filtered$station) | (EndStation %in% stations_filtered$station)) %>% 
+  filter(n > 250)
+station_data_filtered
+
+
+oyster_graph <- as_tbl_graph(station_data_filtered, directed  = TRUE)
 ggraph(oyster_graph, layout = "linear", circular = TRUE) + 
-    geom_edge_arc(aes(width = n, color = n), alpha = 0.2) + 
-    guides(edge_width = 'none') +
-    geom_node_text(aes(label = name), size = 3, repel = FALSE) +
-    scale_color_brewer(palette = "Set1") +
-    theme_graph() +
-  ggtitle("Most Common Tube Journeys")
+    geom_edge_arc(aes(width = n, color = n, alpha = n)) +
+    guides(edge_width = 'none', edge_color = "none") +
+    geom_node_text(aes(label = name), size = 5, repel = TRUE, color = "white") +
+  ggtitle("Most Common Tube Journeys") +
+  scale_edge_colour_distiller(palette = "Reds", direction = 1) +
+  theme_graph(background = 'grey20', text_colour = 'white') +
+  theme(legend.position = "none")
+  
+
+
+# ggraph(oyster_graph) + 
+#     geom_edge_fan(aes(width = n, color = n, alpha = n),
+#                   arrow = arrow(length = unit(2, 'mm')),
+#                   end_cap = circle(2, 'mm')) + 
+#     guides(edge_width = 'none',
+#            edge_colour = "none",
+#            alpha = "none") +
+#     geom_node_text(aes(label = name), size = 5, repel = TRUE, colour = "white") +
+#     scale_edge_colour_distiller(palette = "Reds", direction = 1) +
+#     theme_graph(background = "grey20", text_colour = "white") +
+#   theme(legend.position = "none")
+  
 
 
 ggraph(oyster_graph) + 
-    geom_edge_link(aes(width = n, color = n), alpha = 0.2) + 
-    guides(edge_width = 'none') +
-    geom_node_text(aes(label = name), size = 3, repel = TRUE) +
-    scale_color_brewer(palette = "Set1") +
-    theme_graph()
+    geom_edge_fan(aes(width = n, color = n, alpha = n,
+                      start_cap = label_rect(node1.name),
+                       end_cap = label_rect(node2.name)),
+                  arrow = arrow(length = unit(2, 'mm'))) + 
+    guides(edge_width = 'none',
+           edge_colour = "none",
+           alpha = "none") +
+    geom_node_text(aes(label = name), size = 5, repel = FALSE, colour = "white") +
+    scale_edge_colour_distiller(palette = "Reds", direction = 1) +
+    theme_graph(background = "grey20", text_colour = "white") +
+  theme(legend.position = "none")
+  
 
 
-ggraph(oyster_graph) + 
-    geom_edge_fan(aes(width = n, color = n), alpha = 0.2,
-                  spread = 2,
+
+ed <- oyster_graph %>% 
+         activate(edges) %>% 
+         mutate(mean_journey_length = mean(ave_time),
+                short_journey = ifelse((ave_time < mean_journey_length),
+                                       1, 0))
+ggraph(ed) + 
+    geom_edge_fan(aes(width = n, color = n, alpha = n,
+                      start_cap = label_rect(node1.name),
+                       end_cap = label_rect(node2.name)),
+                  arrow = arrow(length = unit(2, 'mm'))) + 
+    guides(edge_width = 'none',
+           edge_colour = "none",
+           alpha = "none") +
+    geom_node_text(aes(label = name), size = 5, repel = FALSE, colour = "white") +
+    scale_edge_colour_distiller(palette = "Reds", direction = 1) +
+    theme_graph(background = "grey20", text_colour = "white") +
+  theme(legend.position = "none") +
+  facet_edges(~short_journey)
+
+
+
+ggraph(oyster_graph %>% 
+         activate(edges) %>% 
+         mutate(mean_journey_length = mean(ave_time),
+                short_journey = ifelse((ave_time < mean_journey_length),
+                                       1, 0)), layout = "grid") + 
+    geom_edge_fan(aes(width = n, color = n),
+                  spread = 5,
                   arrow = arrow(length = unit(2, 'mm')), 
+                  alpha = 0.5,
                    end_cap = circle(2, 'mm')) + 
     guides(edge_width = 'none') +
     geom_node_text(aes(label = name), size = 3, repel = FALSE) +
-    scale_color_brewer(palette = "Set2") +
+    scale_edge_colour_distiller(palette = "Reds", direction = 1) +
     theme_graph()
+
+## facet wrap short and long journeys
 
 ```
 
@@ -243,7 +351,9 @@ ed %>% summary()
 library(rstanarm)
 options(mc.cores = parallel::detectCores())
 ed_two <- stan_glmer(data = stan_data,
-                   y ~ 1 | post_lunch)
+                   y ~ 1 | post_lunch,
+                   family = poisson,
+                   control = list(adapt_delta = 0.99))
 
 ed_two %>% launch_shinystan()
 
