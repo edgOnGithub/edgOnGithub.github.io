@@ -25,7 +25,15 @@ oyster_underground %>%
   skim()
 oyster_underground %>% 
   head()
-oyster_underground$daytype <- as.factor(oyster_underground$daytype)
+library(forcats)
+oyster_underground$daytype <- factor(oyster_underground$daytype, c("Mon",
+                                                                   "Tue",
+                                                                   "Wed",
+                                                                   "Thu",
+                                                                   "Fri",
+                                                                   "Sat",
+                                                                   "Sun"))
+oyster_underground$downo
 ```
 
 
@@ -124,8 +132,11 @@ stations_data <- oyster_underground_lubridate %>%
 ```{r}
 library(tidygraph)
 stations_filtered <- stations_data %>%
-  filter(n > 200)
+  filter(n > 300)
 stations_filtered
+library(tidyr)
+
+
 oyster_graph <- as_tbl_graph(stations_filtered, directed  = FALSE)
 
 library(ggraph)
@@ -136,27 +147,121 @@ ggraph(oyster_graph, layout = "linear", circular = TRUE) +
     guides(edge_width = 'none') +
     geom_node_text(aes(label = name), size = 3, repel = FALSE) +
     scale_color_brewer(palette = "Set1") +
-    theme_graph()
+    theme_graph() +
+  ggtitle("Most Common Tube Journeys")
 
 
-ggraph(oyster_graph, layout = "fr") + 
-    geom_edge_fan(aes(width = n, color = n), alpha = 0.2,
-                  arrow = arrow(length = unit(4, 'mm')), 
-                   end_cap = circle(3, 'mm')) + 
+ggraph(oyster_graph) + 
+    geom_edge_link(aes(width = n, color = n), alpha = 0.2) + 
     guides(edge_width = 'none') +
-    geom_node_text(aes(label = name), size = 3, repel = FALSE) +
+    geom_node_text(aes(label = name), size = 3, repel = TRUE) +
     scale_color_brewer(palette = "Set1") +
     theme_graph()
 
 
+ggraph(oyster_graph) + 
+    geom_edge_fan(aes(width = n, color = n), alpha = 0.2,
+                  spread = 2,
+                  arrow = arrow(length = unit(2, 'mm')), 
+                   end_cap = circle(2, 'mm')) + 
+    guides(edge_width = 'none') +
+    geom_node_text(aes(label = name), size = 3, repel = FALSE) +
+    scale_color_brewer(palette = "Set2") +
+    theme_graph()
+
+```
+
+
+```{r}
+switched_df <- stations_filtered %>% 
+  unite(col = station_pair, EndStation, StartStn, remove = FALSE)
+switched_df
+
+station_usage <- stations_filtered %>% 
+  unite(col = station_pair, StartStn, EndStation, remove = FALSE) %>% 
+  ungroup() %>% 
+  select(station_pair, n, StartStn, EndStation) %>% 
+  inner_join(y = switched_df %>% 
+               ungroup() %>% 
+               select(station_pair, n), by = 'station_pair') %>% 
+  mutate(summed_journeys = n.x + n.y)
+
+station_usage
+
+stations_filtered_journeys <- stations_filtered %>% 
+  left_join(y = station_usage %>% 
+              select(StartStn, EndStation,summed_journeys), by = c("StartStn", "EndStation")) 
+
+oyster_journeys <- stations_filtered_journeys %>% 
+  as_tbl_graph(directed = FALSE)
+
+
+ggraph(oyster_journeys, layout = "fr") + 
+    geom_edge_fan(aes(width = summed_journeys, color = n), alpha = 0.2) + 
+    guides(edge_width = 'none') +
+    geom_node_text(aes(label = name), size = 3, repel = FALSE) +
+    scale_color_brewer(palette = "Set1") +
+    theme_graph()
 ```
 
 
 
 ```{r}
-library(lubridate)
-oyster_underground_monday <- oyster_underground_monday %>% 
-  mutate(ed_time = hm(EntTimeHHMM))
+
+
+
+stations_data
+oyster_underground_lubridate %>% 
+  filter(StartStn == "Waterloo JLE") %>% 
+  ggplot(aes(x = EntTime)) +
+  geom_histogram() +
+  facet_wrap(~daytype) +
+  theme_minimal()
+
+
+
+stan_data <- oyster_underground_lubridate %>%
+  filter(StartStn == "Waterloo JLE") %>% 
+  filter(daytype != "Sat" | daytype != "Sun") %>% 
+  group_by(EntTimeHHMM, EntTime) %>% 
+  summarise(y = n()) %>% 
+  mutate(post_lunch = ifelse(test = (EntTimeHHMM >= hms("12:00:00")),
+                             1, 2))
+
+stan_data
+
+
+stan_data %>% 
+  ggplot(aes(x = EntTimeHHMM, y = y)) +
+  geom_point() +
+  theme_minimal()
+
+
+ed <- lm(data = stan_data,formula =  y ~ EntTime)
+ed %>% summary()
+
+library(rstanarm)
+options(mc.cores = parallel::detectCores())
+ed_two <- stan_glmer(data = stan_data,
+                   y ~ 1 | post_lunch)
+
+ed_two %>% launch_shinystan()
+
+library(rstan)
+library(shinystan)
+
+stan_data_list <- list(y = stan_data$y,
+               N = nrow(stan_data),
+               id = stan_data$post_lunch,
+               L = 2)
+
+model <- stan('_posts/waterloo_footfall_hierarchical_2.stan',
+              data = stan_data_list,
+              control = list(adapt_delta = 0.999))
+
+model %>% launch_shinystan()
+
+
+  
 
 ```
-
