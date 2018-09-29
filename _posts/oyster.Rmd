@@ -114,7 +114,8 @@ pq
 
 
 ```{r}
-
+library(RColorBrewer)
+library(plotly)
 
 
 oyster_j_time <- oyster_underground_lubridate %>% 
@@ -126,15 +127,22 @@ oyster_j_time_5 <- oyster_j_time %>%
   group_by(five_min, daytype, downo) %>% 
   summarise(average_journey_5 = mean(average_journey))
   
-library(RColorBrewer)
-oyster_j_time_5 %>% 
-  plot_ly(x = ~five_min,
-          y = ~average_journey_5,
-          colors = "Blues",
-          color = ~daytype,
-          mode = "markers",
-          type = "scatter",
-          marker = list(color = brewer.pal("Blues")))
+# 
+# oyster_j_time_5 %>% 
+#   plot_ly(x = ~five_min,
+#           y = ~average_journey_5,
+#           color = ~daytype,
+#           mode = "markers",
+#           type = "scatter",
+#           marker = list(color = brewer.pal(9, name = "Blues")))
+# 
+# oyster_j_time_5 %>% 
+#   plot_ly(x = ~five_min,
+#           y = ~average_journey_5,
+#           colors = "Blues",
+#           color = ~daytype,
+#           mode = "markers",
+#           type = "scatter")
 
 p <- oyster_j_time_5 %>% 
   ggplot(aes(x = five_min,
