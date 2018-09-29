@@ -9,13 +9,19 @@ editor_options:
 ---
 
 Visualising London Underground data.
+```{r, include = FALSE}
+library(readr)
+library(dplyr)
+library(knitr)
+
+```
 
 
 ## Cleaning Data
 
 First we select only London Underground data from TFL's transport CSV.
 
-```{r initial_chunk}
+```{r initial_chunk, cache = TRUE}
 library(readr)
 library(dplyr)
 library(knitr)
@@ -71,7 +77,7 @@ oyster_underground_lubridate <- oyster_underground %>%
 ## Initial Visualisations
 
 Using Plotly we can create histograms  
-```{r initial_histograms, fig.keep=TRUE}
+```{r initial_histograms, fig.show='hold'}
 library(ggplot2)
 library(tidyr)
 p <- ggplot(oyster_underground_lubridate,
@@ -281,7 +287,7 @@ ggraph(ed) +
 
 ```
 
-```{r last_graph}
+```{r last_graph, eval = FALSE}
 
 ggraph(oyster_graph %>% 
          activate(edges) %>% 
