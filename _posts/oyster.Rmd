@@ -15,7 +15,7 @@ Visualising London Underground data.
 
 First we select only London Underground data from TFL's transport CSV.
 
-```{r}
+```{r initial_chunk}
 library(readr)
 library(dplyr)
 library(knitr)
@@ -40,7 +40,7 @@ oyster_underground %>%
 
 ```
 Next we encode `daytype` as a factor with levels running from Monday to Sunday.
-```{r}
+```{r initial_cleaning}
 library(forcats)
 library(lubridate)
 oyster_underground$daytype <- factor(oyster_underground$daytype, c("Mon",
@@ -49,7 +49,9 @@ oyster_underground$daytype <- factor(oyster_underground$daytype, c("Mon",
                                                                    "Thu",
                                                                    "Fri",
                                                                    "Sat",
-                                                                   "Sun"))
+                                                                   "Sun",
+                                                                   "Weekend",
+                                                                   "Weekday"))
 
 
 oyster_underground_lubridate <- oyster_underground %>% 
@@ -69,20 +71,20 @@ oyster_underground_lubridate <- oyster_underground %>%
 ## Initial Visualisations
 
 Using Plotly we can create histograms  
-```{r, fig.keep=TRUE}
+```{r initial_histograms, fig.keep=TRUE}
 library(ggplot2)
 library(tidyr)
 p <- ggplot(oyster_underground_lubridate,
             aes(x = EntTimeHHMM)) +
-  geom_histogram(fill = "firebrick2", binwidth = 600, alpha = 0.2) +
+  geom_histogram(fill = "firebrick2", binwidth = 600, alpha = 0.2, color = "white") +
   theme_minimal() +
   xlab("Tap In Time") +
-  ggtitle("Tap In Time for London Tube Stations")
+  ggtitle("Tap In Time for London Tube Stations") 
 p
 
 q <- ggplot(oyster_underground_lubridate,
             aes(x = EXTimeHHMM)) +
-  geom_histogram(fill = "springgreen2", binwidth = 600) +
+  geom_histogram(fill = "springgreen2", binwidth = 600, colour = "white") +
   theme_minimal() +
   ggtitle("Tap Out Time for London Tube Stations") +
   xlab("Tap Out Time")
@@ -95,7 +97,7 @@ q
 
 Now we combine the two together in a density plot:
 
-```{r}
+```{r overlaid_densities}
 
 pq <- oyster_underground_lubridate %>% 
                select("Tap In" = EntTimeHHMM,"Tap Out" = EXTimeHHMM) %>%
@@ -113,7 +115,7 @@ pq
 
 
 
-```{r}
+```{r journey_times}
 library(RColorBrewer)
 library(plotly)
 
@@ -161,7 +163,7 @@ q <- oyster_j_time_5 %>%
   ggplot(aes(x = five_min,
              y = average_journey_5,
              colour = daytype)) +
-  geom_smooth(se = FALSE, size = 2, linetype = "longdash") +
+  geom_smooth(se = FALSE, size = 2) +
   scale_color_brewer(palette = "OrRd", direction = -1, "Day") +
   theme_minimal()
 q
@@ -170,8 +172,8 @@ q
 
 
 
-
-```{r}
+Creating station data
+```{r creating_station_data}
 
 stations_data <- oyster_underground_lubridate %>% 
   group_by(StartStn, EndStation) %>% 
@@ -184,7 +186,9 @@ stations_data <- oyster_underground_lubridate %>%
 
 ```
 
-```{r}
+
+
+```{r initial_graphs}
 library(tidygraph)
 library(ggraph)
 stations_filtered <- stations_data %>%
@@ -195,27 +199,32 @@ stations_filtered <- stations_data %>%
   select(station)
 
 
-stations_filtered
+
 
 station_data_filtered <- stations_data %>% 
   mutate(x = rnorm(n())) %>% 
   arrange(x) %>% 
   filter((StartStn %in% stations_filtered$station) | (EndStation %in% stations_filtered$station)) %>% 
   filter(n > 250)
-station_data_filtered
+
 
 
 oyster_graph <- as_tbl_graph(station_data_filtered, directed  = TRUE)
 ggraph(oyster_graph, layout = "linear", circular = TRUE) + 
-    geom_edge_arc(aes(width = n, color = n, alpha = n)) +
+    geom_edge_arc(aes(width = n, color = n, alpha = n,
+                      
+                      start_cap = label_rect(node1.name),
+                       end_cap = label_rect(node2.name))) +
     guides(edge_width = 'none', edge_color = "none") +
-    geom_node_text(aes(label = name), size = 5, repel = TRUE, color = "white") +
+    geom_node_text(aes(label = name), size = 5, repel = FALSE, color = "white") +
   ggtitle("Most Common Tube Journeys") +
   scale_edge_colour_distiller(palette = "Reds", direction = 1) +
   theme_graph(background = 'grey20', text_colour = 'white') +
   theme(legend.position = "none")
   
+```
 
+```{r fan_graph}
 
 # ggraph(oyster_graph) + 
 #     geom_edge_fan(aes(width = n, color = n, alpha = n),
@@ -244,7 +253,9 @@ ggraph(oyster_graph) +
     theme_graph(background = "grey20", text_colour = "white") +
   theme(legend.position = "none")
   
+```
 
+```{r facetted_graph}
 
 
 ed <- oyster_graph %>% 
@@ -268,6 +279,10 @@ ggraph(ed) +
 
 
 
+```
+
+```{r last_graph}
+
 ggraph(oyster_graph %>% 
          activate(edges) %>% 
          mutate(mean_journey_length = mean(ave_time),
@@ -278,7 +293,8 @@ ggraph(oyster_graph %>%
                   arrow = arrow(length = unit(2, 'mm')), 
                   alpha = 0.5,
                    end_cap = circle(2, 'mm')) + 
-    guides(edge_width = 'none') +
+    guides(edge_width = 'none',
+           edge_colour = "none") +
     geom_node_text(aes(label = name), size = 3, repel = FALSE) +
     scale_edge_colour_distiller(palette = "Reds", direction = 1) +
     theme_graph()
@@ -288,7 +304,7 @@ ggraph(oyster_graph %>%
 ```
 
 
-```{r}
+```{r, eval = FALSE}
 switched_df <- stations_filtered %>% 
   unite(col = station_pair, EndStation, StartStn, remove = FALSE)
 switched_df
@@ -323,18 +339,49 @@ ggraph(oyster_journeys, layout = "fr") +
 
 
 ```{r}
+library(magrittr)
+library(scales)
 
 
+wknd <- oyster_underground_lubridate %>% 
+  mutate(daytype = ifelse((daytype == "Sat") | (daytype == "Sun"), "Weekend", "Weekday"))
+wknd$daytype <- factor(wknd$daytype,
+                 c("Mon",
+                   "Tue",
+                   "Wed",
+                   "Thu",
+                   "Fri",
+                   "Sat",
+                   "Sun",
+                   "Weekend",
+                   "Weekday"))
+  
+duplicated_data <- bind_rows(oyster_underground_lubridate, wknd)
 
-stations_data
-oyster_underground_lubridate %>% 
+duplicated_data %>% 
   filter(StartStn == "Waterloo JLE") %>% 
-  ggplot(aes(x = EntTime)) +
-  geom_histogram() +
-  facet_wrap(~daytype) +
-  theme_minimal()
+  ggplot(aes(x = EntTimeHHMM %>% as.POSIXct(), fill = daytype)) +
+  geom_histogram(colour = "black", bins = 24) +
+  facet_wrap(~daytype, scale = "free_y") +
+  theme_minimal() +
+  guides(fill = "none") +
+  scale_fill_brewer(palette = "Set3", direction = -1, "Day") +
+  theme(axis.text.x = element_text(angle = -90, hjust = 0)) +
+  scale_x_datetime(labels = date_format("%H:%M")) +
+  xlab("Hour of Day") +
+  labs(title = "Footfall Per Hour",
+       subtitle = "Waterloo JLE",
+       caption = "Note rescaled y-axes")
+
+```
 
 
+
+
+
+## Modelling
+
+```{r, eval=FALSE}
 
 stan_data <- oyster_underground_lubridate %>%
   filter(StartStn == "Waterloo JLE") %>% 
