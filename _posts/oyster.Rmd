@@ -384,12 +384,85 @@ duplicated_data %>%
 
 
 
+```{r}
+duplicated_data %>% 
+  ggplot(aes(x = EntTimeHHMM %>% as.POSIXct(), fill = daytype)) +
+  geom_histogram(colour = "black", bins = 24) +
+  facet_wrap(~daytype, scale = "free_y") +
+  theme_minimal() +
+  guides(fill = "none") +
+  scale_fill_brewer(palette = "Set3", direction = -1, "Day") +
+  theme(axis.text.x = element_text(angle = -90, hjust = 0)) +
+  scale_x_datetime(labels = date_format("%H:%M")) +
+  xlab("Hour of Day") +
+  labs(title = "Footfall Per Hour",
+       subtitle = "Waterloo JLE",
+       caption = "Note rescaled y-axes")
+```
 
-## Modelling
+
+
+
+
+## Modelling Completely Pooled
 
 ```{r, eval=FALSE}
+library(tibbletime)
+library(dynlm)
 
 
+pooled_data <- oyster_underground_lubridate %>% 
+    filter(daytype != "Sat" | daytype != "Sun") %>% 
+  group_by(EntTimeHHMM, StartStn) %>% 
+  summarise(y = n()) %>% 
+  as_tbl_time(index = EntTimeHHMM)
+
+
+## Creating lags
+pooled_data <- pooled_data %>%  
+  group_by(StartStn) %>% 
+  mutate(y_d = y - lag(y)) %>% 
+  ungroup()
+
+simple_ar_1 <- dynlm(d(y) ~ L(y, 1),
+                      data = pooled_data %>% 
+                       select(y) %>% 
+                       as.zoo())
+summary(simple_ar_1)
+
+
+p_1 <- ggplot(pooled_data,
+       aes(x = EntTimeHHMM,
+           y = y_d)) +
+  geom_point()
+
+p_1
+
+p_2 <- ggplot(pooled_data,
+              aes(x = EntTimeHHMM,
+                  y = y,
+                  group = StartStn,
+                  colour = StartStn)) +
+  geom_line()
+p_2
+
+subplot(p_1, p_2)
+
+
+p_3 <- ggplot(pooled_data,
+              aes(x = EntTimeHHMM,
+                  y = y_d*10)) +
+  geom_point(alpha = 0.2) +
+  geom_line(aes(x = EntTimeHHMM,
+                y = y))
+p_3
+
+
+
+```
+
+
+```{r}
 
 ## TODO: time series stuff AR process, exponential CS fit, pool station data. LTSM. XGBoost
 
