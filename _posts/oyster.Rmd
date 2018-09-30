@@ -427,7 +427,7 @@ ggplot(oyster_dates,
   
 ```
 
-## How Many Journeys Across whole of tube network?
+## Data Manipulation
 
 ```{r}
 library(tibbletime)
@@ -462,12 +462,107 @@ pooled_time_data %>%
 
 
 
-pooled_time_data <- pooled_time_data %>% 
-  filter()
+pooled_weekday <- pooled_time_data %>% 
+  filter(!((daytype == "Sat") | (daytype == "Sun"))) %>% 
+  select(index = date, y)
+
+
+  ggplot(pooled_weekday,
+         aes(x = index,
+             y = y)) +
+  geom_point()
 
 ```
 
 
+## Very similar to this blog post
+https://blogs.rstudio.com/tensorflow/posts/2018-06-25-sunspots-lstm/
+
+```{r}
+library(tidyquant)
+library(timetk)
+library(glue)
+library(cowplot)
+
+library(rsample)
+library(yardstick) 
+
+library(recipes)
+
+periods_train <- 60 * 24 * 1.5
+periods_test <- 60 * 24 * 1
+skip_span <- 60 * 1 * 1
+
+rolling_origin_resamples <- rolling_origin(pooled_weekday,
+                                           initial = periods_train,
+                                           assess = periods_test,
+                                           cumulative = FALSE,
+                                           skip = skip_span
+                                        
+)
+
+plot_split <- function(split,
+                       expand_y_axis = TRUE,
+                       alpha = 1,
+                       size = 1,
+                       base_size = 14,
+                       main_data = NULL){
+  train_tbl <- training(split) %>% 
+    add_column(key = "training")
+  
+  test_tbl <- testing(split) %>% 
+    add_column(key = "testing")
+  
+  data_manipulated <- bind_rows(train_tbl,
+                                test_tbl) %>% 
+    as_tbl_time(index = index) %>% 
+    mutate(key = fct_relevel(key,
+                             "training",
+                             "testing"))
+  
+  train_time_summary <- train_tbl %>% 
+    tk_index() %>% 
+    tk_get_timeseries_summary()
+  
+    test_time_summary <- test_tbl %>% 
+    tk_index() %>% 
+    tk_get_timeseries_summary()
+
+  g <- data_manipulated %>% 
+    ggplot(aes(x = index, y = y,
+               color = key)) +
+        geom_line(size = size,
+              alpha = alpha) +
+    theme_tq(base_size) +
+    scale_color_tq() +
+    labs(title = glue("Split: {split$id}"),
+         subtitle = glue("{train_time_summary$start} to ",
+                         "{test_time_summary$end}"),
+         y = "",
+         x = "") +
+    theme(legend.position = "none")
+  
+   
+
+  
+  if (expand_y_axis == TRUE){
+    time_summary <- main_data %>% 
+      tk_index() %>% 
+      tk_get_timeseries_summary()
+    
+    g <- g +
+      scale_x_date(limits = c(time_summary$start,
+                              time_summary$end))
+  }
+  
+  g
+}
+
+rolling_origin_resamples[[15]] %>% 
+  plot_split(expand_y_axis = FALSE) +
+  theme(legend.position = "bottom")
+
+```
 
 
 
