@@ -33,6 +33,9 @@ gc()
 
 oyster_underground <- oyster_underground %>% 
   filter(StartStn != "Unstarted") %>% 
+  filter(EndStation != "Unfinished") %>% 
+  filter(!is.na(EntTimeHHMM)) %>% 
+  filter(!is.na(EXTimeHHMM)) %>% 
   select(-SubSystem)
 
 oyster_underground %>% 
@@ -58,14 +61,6 @@ oyster_underground$daytype <- factor(oyster_underground$daytype, c("Mon",
                                                                    "Sun",
                                                                    "Weekend",
                                                                    "Weekday"))
-
-##
-library(tidyr)
-oyster_knit <- oyster_underground %>% 
-  unite(col = time, sep = " ", daytype, EntTimeHHMM)
-oyster_knit <- oyster_knit %>% 
-  mutate(entry_)
-##
 
 oyster_underground_lubridate <- oyster_underground %>% 
   mutate(entry_time = EntTimeHHMM %>% 
@@ -410,6 +405,72 @@ duplicated_data %>%
 
 
 ## TODO: knit together days somehow and use rolling samples to model the problem. 
+
+
+```{r}
+oyster_knit <- oyster_underground %>%
+  filter(!(is.na(EntTimeHHMM) & is.na(EXTimeHHMM))) %>% 
+  mutate(downo = sub("^", "0", downo)) %>% 
+  unite(col = entry_datetime, sep = "-11-09 ", downo, EntTimeHHMM, remove = FALSE)
+oyster_knit <- oyster_knit %>% 
+  unite(col = exit_datetime, sep = "-11-09 ", downo, EXTimeHHMM, remove = FALSE)
+  
+oyster_dates <- oyster_knit %>% 
+  mutate(entry_datetime = dmy_hms(entry_datetime),
+         exit_datetime = dmy_hms(exit_datetime))
+
+
+
+ggplot(oyster_dates,
+       aes(x = entry_datetime)) +
+  geom_histogram(binwidth = 600)
+  
+```
+
+## How Many Journeys Across whole of tube network?
+
+```{r}
+library(tibbletime)
+pooled_data <- oyster_dates %>% 
+  group_by(entry_datetime) %>% 
+  summarise(y = n(),
+            daytype = first(daytype),
+            fare = mean(DFare, na.rm = TRUE)) %>% 
+  rename(date = entry_datetime) %>% 
+  as_tbl_time(index = date)
+pooled_data
+
+
+earliest_time <- pooled_data$date %>% min()
+latest_time <- pooled_data$date %>% max()
+
+
+
+empty_ts <- create_series(earliest_time ~ latest_time, "1 minutes")
+pooled_time_data <- left_join(empty_ts, pooled_data, by = "date") %>% 
+  mutate(y = ifelse(is.na(y), 0, y),
+         fare = ifelse(is.na(fare), 0, fare),
+         daytype = wday(date, label = TRUE))
+pooled_time_data
+
+pooled_time_data %>% 
+  ggplot(aes(x = date,
+             y = y,
+             colour = y)) + 
+  geom_point()
+
+
+
+
+pooled_time_data <- pooled_time_data %>% 
+  filter()
+
+```
+
+
+
+
+
 
 ## Modelling Completely Pooled
 
