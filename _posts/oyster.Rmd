@@ -389,6 +389,16 @@ duplicated_data %>%
 
 ```{r, eval=FALSE}
 
+
+
+## TODO: time series stuff AR process, exponential CS fit, pool station data. LTSM. XGBoost
+
+## plot y histogram
+
+
+
+
+
 stan_data <- oyster_underground_lubridate %>%
   filter(StartStn == "Waterloo JLE") %>% 
   filter(daytype != "Sat" | daytype != "Sun") %>% 
@@ -398,6 +408,11 @@ stan_data <- oyster_underground_lubridate %>%
                              1, 2))
 
 stan_data
+
+ggplot(stan_data,
+       aes(y)) +
+  geom_histogram(bins = 60)
+
 
 
 stan_data %>% 
