@@ -397,12 +397,12 @@ duplicated_data %>%
   xlab("Hour of Day") +
   labs(title = "Footfall Per Hour",
        subtitle = "Waterloo JLE",
-       caption = "Note rescaled y-axes")
+       caption = "Note: Rescaled y-axes")
 ```
 
 
 
-
+## TODO: knit together days somehow and use rolling samples to model the problem. 
 
 ## Modelling Completely Pooled
 
@@ -411,18 +411,57 @@ library(tibbletime)
 library(dynlm)
 
 
-pooled_data <- oyster_underground_lubridate %>% 
-    filter(daytype != "Sat" | daytype != "Sun") %>% 
-  group_by(EntTimeHHMM, StartStn) %>% 
+pooled_data_original <- oyster_underground_lubridate %>% 
+    filter(daytype != "Sat" & daytype != "Sun") %>% 
+  group_by(EntTimeHHMM, EntTime, daytype) %>% 
   summarise(y = n()) %>% 
   as_tbl_time(index = EntTimeHHMM)
 
+pooled_data_manipulated <- pooled_data_original %>% 
+  group_by(daytype) %>% 
+  mutate(y_diff = y - lag(y))
+
+pooled_monday <- pooled_data_manipulated %>% 
+  filter(daytype == "Mon")
+
+pooled_train <- pooled_data_manipulated %>% 
+  filter(daytype != "Mon")
+
+ggplot(pooled_train %>% 
+         filter(daytype == "Tue"),
+       aes(x = EntTimeHHMM,
+           y = y_diff)) +
+  geom_point()
+
+model_0 <- glm(y ~ EntTime,
+              data = pooled_train,
+              family = poisson)
+summary(model_0)
+
+preds <- predict(model_0,
+                newdata = pooled_monday %>% 
+                  select(EntTime))
+pooled_monday$predictions <- preds
+
+ggplot(pooled_monday,
+       aes(x = EntTimeHHMM,
+           y = y)) +
+  geom_point() +
+  geom_point(aes(x = EntTimeHHMM,
+                 y = predictions), colour = 'red')
+
+
+
+model_1 <- lm(y_diff ~ EntTimeHHMM,
+               data = pooled_train)
+
+summary(model_1)
 
 ## Creating lags
-pooled_data <- pooled_data %>%  
-  group_by(StartStn) %>% 
-  mutate(y_d = y - lag(y)) %>% 
-  ungroup()
+# pooled_data <- pooled_data %>%  
+#   group_by(StartStn) %>% 
+#   mutate(y_d = y - lag(y)) %>% 
+#   ungroup()
 
 simple_ar_1 <- dynlm(d(y) ~ L(y, 1),
                       data = pooled_data %>% 
@@ -440,9 +479,7 @@ p_1
 
 p_2 <- ggplot(pooled_data,
               aes(x = EntTimeHHMM,
-                  y = y,
-                  group = StartStn,
-                  colour = StartStn)) +
+                  y = y)) +
   geom_line()
 p_2
 
