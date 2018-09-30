@@ -59,15 +59,22 @@ oyster_underground$daytype <- factor(oyster_underground$daytype, c("Mon",
                                                                    "Weekend",
                                                                    "Weekday"))
 
+##
+library(tidyr)
+oyster_knit <- oyster_underground %>% 
+  unite(col = time, sep = " ", daytype, EntTimeHHMM)
+oyster_knit <- oyster_knit %>% 
+  mutate(entry_)
+##
 
 oyster_underground_lubridate <- oyster_underground %>% 
-  mutate(entry_datetime = EntTimeHHMM %>% 
+  mutate(entry_time = EntTimeHHMM %>% 
            as.POSIXct() %>% 
            ymd_hms(),
-         exit_datetime = EXTimeHHMM %>% 
+         exit_time = EXTimeHHMM %>% 
            as.POSIXct() %>% 
            ymd_hms(),
-         journey_time = interval(entry_datetime, exit_datetime) %>% 
+         journey_time = interval(entry_time, exit_time) %>% 
            time_length(unit = "minute")) %>% 
   filter(journey_time > 0)
 ```
@@ -127,11 +134,11 @@ library(plotly)
 
 
 oyster_j_time <- oyster_underground_lubridate %>% 
-  group_by(entry_datetime, daytype, downo) %>% 
+  group_by(entry_time, daytype, downo) %>% 
   summarise(average_journey = mean(journey_time))
 
 oyster_j_time_5 <- oyster_j_time %>% 
-  mutate(five_min = round_date(entry_datetime, unit = "5 min")) %>% 
+  mutate(five_min = round_date(entry_time, unit = "5 min")) %>% 
   group_by(five_min, daytype, downo) %>% 
   summarise(average_journey_5 = mean(average_journey))
   
@@ -373,7 +380,7 @@ duplicated_data %>%
   guides(fill = "none") +
   scale_fill_brewer(palette = "Set3", direction = -1, "Day") +
   theme(axis.text.x = element_text(angle = -90, hjust = 0)) +
-  scale_x_datetime(labels = date_format("%H:%M")) +
+  scale_x_time(labels = date_format("%H:%M")) +
   xlab("Hour of Day") +
   labs(title = "Footfall Per Hour",
        subtitle = "Waterloo JLE",
@@ -393,7 +400,7 @@ duplicated_data %>%
   guides(fill = "none") +
   scale_fill_brewer(palette = "Set3", direction = -1, "Day") +
   theme(axis.text.x = element_text(angle = -90, hjust = 0)) +
-  scale_x_datetime(labels = date_format("%H:%M")) +
+  scale_x_time(labels = date_format("%H:%M")) +
   xlab("Hour of Day") +
   labs(title = "Footfall Per Hour",
        subtitle = "Waterloo JLE",
