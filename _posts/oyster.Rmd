@@ -8,7 +8,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-Visualising London Underground data.
+In this post we're departing a little from replication of papers in economics and trying our hand at visualising networks followed by modelling passenger footfall across the London Underground during a week in November 2009. 
 ```{r, include = FALSE}
 library(readr)
 library(dplyr)
@@ -17,9 +17,13 @@ library(knitr)
 ```
 
 
-## Cleaning Data
 
-First we select only London Underground data from TFL's transport CSV.
+
+## Cleaning Data
+The dataset we use comes from TFL's open data [portal](https://tfl.gov.uk/info-for/open-data-users/) and represents a random sample (I hope) of TFL's Oyster Card data during on week in November - the data provided represents approximately 5\% of all journey's during this period.
+
+
+First, we need to isolate Tube journeys from the Oyster Card CSV TFL provides. Next, we remove any journeys where we don't know the start or end station and finally we remove any journeys that have an unknown start or end time.
 
 ```{r initial_chunk, cache = TRUE}
 library(readr)
@@ -27,7 +31,7 @@ library(dplyr)
 library(knitr)
 oyster <- read_csv('assets/Original Data/Nov09JnyExport.csv') 
 oyster_underground <- oyster %>% 
-  filter(SubSystem == "LUL")
+  filter(SubSystem == "LUL") # LUL is the SubSystem code for Tube journeys
 rm(oyster)
 gc()
 
@@ -41,14 +45,9 @@ oyster_underground <- oyster_underground %>%
 oyster_underground %>% 
   head() %>% 
   kable()
-
-
-
-
-
-
 ```
-Next we encode `daytype` as a factor with levels running from Monday to Sunday.
+
+Next we encode `daytype` as a factor with levels running from Monday to Sunday, we also add a weekday and weekend factor that will make histograms featuring aggregated data later easier to order. Finally, we convert the timestamp TFL use to a more accessible format using lubridate's `ymd_hms()` and create `journey_time` using lubridate's `interval()` function.
 ```{r initial_cleaning}
 library(forcats)
 library(lubridate)
@@ -78,10 +77,10 @@ oyster_underground_lubridate <- oyster_underground %>%
 
 ## Initial Visualisations
 
-Using Plotly we can create histograms  
+Plotly and GitHub Pages haven't been playing together nicely recently so we'll stick with ggplot2 for now. A binwidth of 600 seconds corresponds to ten minute intervals, `geom_histogram` creates a histogram corresponding to the density of time observations which is effectively a barchart of footfall against time for our purposes here.
 ```{r initial_histograms, fig.show='hold', fig.align="center"}
 library(ggplot2)
-library(tidyr)
+
 p <- ggplot(oyster_underground_lubridate,
             aes(x = EntTimeHHMM)) +
   geom_histogram(fill = "firebrick2", binwidth = 600, alpha = 0.2, color = "white") +
@@ -103,10 +102,9 @@ q
 ```
 
 
-Now we combine the two together in a density plot:
-
+Combining the information from each plot into an overlaid density plot clearly demonstrates the lead and lag time between commuters tapping in and tapping out upon completing their journey.
 ```{r overlaid_densities, fig.align="center"}
-
+library(tidyr)
 pq <- oyster_underground_lubridate %>% 
                select("Tap In" = EntTimeHHMM,"Tap Out" = EXTimeHHMM) %>%
                gather(type, time, "Tap In", "Tap Out") %>% 
@@ -121,12 +119,10 @@ pq
 
 ```
 
-
+Now we bin each time period into five minute intervals and plot mean journey time as a function of tap in time. Here we bin the intervals using two dplyr pipes and lubridate, alternatively we could have used the tibbletime library which we'll explore briefly later.
 
 ```{r journey_times, fig.align="center"}
 library(RColorBrewer)
-library(plotly)
-
 
 oyster_j_time <- oyster_underground_lubridate %>% 
   group_by(entry_time, daytype, downo) %>% 
@@ -137,23 +133,6 @@ oyster_j_time_5 <- oyster_j_time %>%
   group_by(five_min, daytype, downo) %>% 
   summarise(average_journey_5 = mean(average_journey))
   
-# 
-# oyster_j_time_5 %>% 
-#   plot_ly(x = ~five_min,
-#           y = ~average_journey_5,
-#           color = ~daytype,
-#           mode = "markers",
-#           type = "scatter",
-#           marker = list(color = brewer.pal(9, name = "Blues")))
-# 
-# oyster_j_time_5 %>% 
-#   plot_ly(x = ~five_min,
-#           y = ~average_journey_5,
-#           colors = "Blues",
-#           color = ~daytype,
-#           mode = "markers",
-#           type = "scatter")
-
 p <- oyster_j_time_5 %>% 
   ggplot(aes(x = five_min,
              y = average_journey_5,
@@ -178,6 +157,14 @@ q
 
 ```
 
+LOESS lines show a little clearer than the scatter plot that it seems like weekends have higher average journey times. This is a little counter-intuitive as at first glance we'd expect weekday journeys to be longer due to rush hour traffic. However, a simple explanation (classic confounder relationship) is that commuter preferences change when comparing weekdays and weekends - short commutes to work will have different mean journey times than sightseeing trips on the weekend for instance.
+
+To formally test for this:
+```{r}
+model <- lm(average_journey_5 ~ five_min + daytype,
+            data = oyster_j_time_5)
+model %>% summary()
+```
 
 
 Creating station data
@@ -407,6 +394,7 @@ duplicated_data %>%
 ## TODO: knit together days somehow and use rolling samples to model the problem. 
 
 
+
 ```{r}
 oyster_knit <- oyster_underground %>%
   filter(!(is.na(EntTimeHHMM) & is.na(EXTimeHHMM))) %>% 
@@ -428,6 +416,7 @@ ggplot(oyster_dates,
 ```
 
 ## Data Manipulation
+
 
 ```{r}
 library(tibbletime)
