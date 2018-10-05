@@ -13,7 +13,34 @@ In this post we're departing a little from replication of papers in economics an
 library(readr)
 library(dplyr)
 library(knitr)
+library(forcats)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+library(RColorBrewer)
+library(magrittr)
+library(scales)
+library(tidygraph)
+library(ggraph)
+library(tidyquant)
+library(timetk)
+library(glue)
+library(cowplot)
+library(rsample)
+library(yardstick) 
+library(recipes)
+library(tibbletime)
+library(keras)
+library(tfruns)
+library(broom)
 
+opts_chunk$set(echo=TRUE,
+	             cache=TRUE,
+               prompt=FALSE,
+               tidy=FALSE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE)
 ```
 
 
@@ -48,7 +75,7 @@ oyster_underground %>%
 ```
 
 Next we encode `daytype` as a factor with levels running from Monday to Sunday, we also add a weekday and weekend factor that will make histograms featuring aggregated data later easier to order. Finally, we convert the timestamp TFL use to a more accessible format using lubridate's `ymd_hms()` and create `journey_time` using lubridate's `interval()` function.
-```{r initial_cleaning}
+```{r initial_cleaning, cache = TRUE}
 library(forcats)
 library(lubridate)
 oyster_underground$daytype <- factor(oyster_underground$daytype, c("Mon",
@@ -78,7 +105,7 @@ oyster_underground_lubridate <- oyster_underground %>%
 ## Initial Visualisations
 
 Plotly and GitHub Pages haven't been playing together nicely recently so we'll stick with ggplot2 for now. A binwidth of 600 seconds corresponds to ten minute intervals, `geom_histogram` creates a histogram corresponding to the density of time observations which is effectively a barchart of footfall against time for our purposes here.
-```{r initial_histograms, fig.show='hold', fig.align="center"}
+```{r initial_histograms, fig.show='hold', fig.align="center", cache = TRUE}
 library(ggplot2)
 
 p <- ggplot(oyster_underground_lubridate,
@@ -103,8 +130,7 @@ q
 
 
 Combining the information from each plot into an overlaid density plot clearly demonstrates the lead and lag time between commuters tapping in and tapping out upon completing their journey.
-```{r overlaid_densities, fig.align="center"}
-library(tidyr)
+```{r overlaid_densities, fig.align="center", cache = TRUE}
 pq <- oyster_underground_lubridate %>% 
                select("Tap In" = EntTimeHHMM,"Tap Out" = EXTimeHHMM) %>%
                gather(type, time, "Tap In", "Tap Out") %>% 
@@ -159,29 +185,38 @@ q
 
 LOESS lines show a little clearer than the scatter plot that it seems like weekends have higher average journey times. This is a little counter-intuitive as at first glance we'd expect weekday journeys to be longer due to rush hour traffic. However, a simple explanation (classic confounder relationship) is that commuter preferences change when comparing weekdays and weekends - short commutes to work will have different mean journey times than sightseeing trips on the weekend for instance.
 
-To formally test for this:
-```{r}
-model <- lm(average_journey_5 ~ five_min + daytype,
+To formally test for this^[Really and truly we should make adjustments to our standard errors here for heteroscedasticity and autocorrelation]:
+```{r, results = "asis"}
+library(broom)
+oyster_j_time_5 <- oyster_j_time_5 %>% 
+  mutate(weeknd = ifelse((daytype == "Sat") | (daytype == "Sun"), 1, 0))
+
+model <- lm(average_journey_5 ~ five_min + weeknd,
             data = oyster_j_time_5)
-model %>% summary()
+results <- model %>% tidy()
+confints <- model %>% confint_tidy()
+estimates_intervals <- bind_cols(results, confints)
+
+estimates_intervals %>% xtable()
 ```
 
 
-Creating station data
-```{r creating_station_data}
+## Network Visuallisations
 
+Now we move onto visuallising the network aspect of London's Tube data. Here we `group_by` starting and closing station and find the number of journeys, mean journey length and mean fare.
+
+```{r creating_station_data}
 stations_data <- oyster_underground_lubridate %>% 
   group_by(StartStn, EndStation) %>% 
   summarise(n = n(),
             ave_time = mean(journey_time, na.rm = TRUE),
             FFare_mean = mean(FFare, na.rm = TRUE)) %>% 
   arrange(-n)
-
-
-
 ```
 
+Next, we create a series of the 15 largest station pairings by journey figures and select only the stations connecting to these "hub" stations. We use a random normal variable `x` to order our dataframe so that large stations aren't bunched together in our plots.
 
+Then we use tidygraph and ggraph to plot a circular network graph.
 
 ```{r initial_graphs, fig.height=10, fig.width=10}
 library(tidygraph)
@@ -219,22 +254,9 @@ ggraph(oyster_graph, layout = "linear", circular = TRUE) +
   
 ```
 
+
+Here we use a different type of network graph to display the directed relationship of the data, we use an extra large plot however it's still a little messy.
 ```{r fan_graph, fig.height=10, fig.width=10}
-
-# ggraph(oyster_graph) + 
-#     geom_edge_fan(aes(width = n, color = n, alpha = n),
-#                   arrow = arrow(length = unit(2, 'mm')),
-#                   end_cap = circle(2, 'mm')) + 
-#     guides(edge_width = 'none',
-#            edge_colour = "none",
-#            alpha = "none") +
-#     geom_node_text(aes(label = name), size = 5, repel = TRUE, colour = "white") +
-#     scale_edge_colour_distiller(palette = "Reds", direction = 1) +
-#     theme_graph(background = "grey20", text_colour = "white") +
-#   theme(legend.position = "none")
-  
-
-
 ggraph(oyster_graph) + 
     geom_edge_fan(aes(width = n, color = n, alpha = n,
                       start_cap = label_rect(node1.name),
@@ -249,6 +271,7 @@ ggraph(oyster_graph) +
   theme(legend.position = "none")
   
 ```
+
 
 ```{r facetted_graph, fig.height=10, fig.width=10, eval = FALSE, echo = FALSE}
 
@@ -276,7 +299,9 @@ ggraph(ed) +
 
 ```
 
-```{r last_graph, eval = FALSE}
+
+I'm not sure if this one is informative but it looks funky I guess.
+```{r last_graph, eval = TRUE,fig.height=10, fig.width=10 }
 
 ggraph(oyster_graph %>% 
          activate(edges) %>% 
@@ -294,9 +319,10 @@ ggraph(oyster_graph %>%
     scale_edge_colour_distiller(palette = "Reds", direction = 1) +
     theme_graph()
 
-## facet wrap short and long journeys
-
 ```
+
+
+
 
 
 ```{r, eval = FALSE}
@@ -336,6 +362,7 @@ ggraph(oyster_journeys, layout = "fr") +
 ```{r time_of_day_hist, fig.align="center"}
 library(magrittr)
 library(scales)
+
 
 
 wknd <- oyster_underground_lubridate %>% 
@@ -603,6 +630,7 @@ rolling_origin_resamples %>%
 ## Creating LTSM Model
 
 Using example split
+
 ```{r}
 example_split    <- rolling_origin_resamples$splits[[6]]
 example_split_id <- rolling_origin_resamples$id[[6]]
@@ -639,6 +667,7 @@ scale_history <- rec_obj$steps[[3]]$sds["y"]
 
 
 transforming data
+
 ```{r}
 
 n_timesteps <- 12
@@ -703,6 +732,7 @@ y_valid <- reshape_X_3d(y_valid)
 y_test <- reshape_X_3d(y_test)
 
 ```
+
 
 
 ```{r}
