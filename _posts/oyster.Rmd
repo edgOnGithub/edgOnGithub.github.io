@@ -358,13 +358,15 @@ ggraph(oyster_journeys, layout = "fr") +
 ```
 
 
+## Visuallising Footfall
+
+In this section we'll explore how to predict Tube footfall using a number of different techniques, rather than drilling down on one particular method we'll briefly compare model performance.
+
+First however, some more visulations:
 
 ```{r time_of_day_hist, fig.align="center"}
 library(magrittr)
 library(scales)
-
-
-
 wknd <- oyster_underground_lubridate %>% 
   mutate(daytype = ifelse((daytype == "Sat") | (daytype == "Sun"), "Weekend", "Weekday"))
 wknd$daytype <- factor(wknd$daytype,
@@ -379,7 +381,6 @@ wknd$daytype <- factor(wknd$daytype,
                    "Weekday"))
   
 duplicated_data <- bind_rows(oyster_underground_lubridate, wknd)
-
 duplicated_data %>% 
   filter(StartStn == "Waterloo JLE") %>% 
   ggplot(aes(x = EntTimeHHMM %>% as.POSIXct(), fill = daytype)) +
@@ -397,10 +398,10 @@ duplicated_data %>%
 
 ```
 
+Above we use `duplicated_data` to observe each entry twice in the dataset. We see data points once on the actual day of observation and again aggregated in a weekday/weekend factor - this makes `facet_wrap` easier to use.
 
 
-
-```{r}
+```{r, fig.align = "center"}
 duplicated_data %>% 
   ggplot(aes(x = EntTimeHHMM %>% as.POSIXct(), fill = daytype)) +
   geom_histogram(colour = "black", bins = 24) +
@@ -412,17 +413,19 @@ duplicated_data %>%
   scale_x_time(labels = date_format("%H:%M")) +
   xlab("Hour of Day") +
   labs(title = "Footfall Per Hour",
-       subtitle = "Waterloo JLE",
+       subtitle = "All Stations",
        caption = "Note: Rescaled y-axes")
 ```
 
 
 
-## TODO: knit together days somehow and use rolling samples to model the problem. 
+## Time Series Creation 
 
+Now we 'knit' together each disparate date and time observation into a single time series. We need to do this because TFL record data for each day separately, rather than recording an observation of 0 footfall when the station is closed as we would like.
 
+To do this we exploit a little trick of `unite` that lets us place our own separator between united columns - we use "-11-09 " as our separator since this, combined with the day of the week number in `downo`, will give us a full datetime variable^[This only works because Sunday is recorded as `downo` equal to 1 and the first week in November 2009 also started on a Sunday, otherwise we'd have to shuffle `downo` values to reflect the actual day on a week in November 09].
 
-```{r}
+```{r, fig.align="center"}
 oyster_knit <- oyster_underground %>%
   filter(!(is.na(EntTimeHHMM) & is.na(EXTimeHHMM))) %>% 
   mutate(downo = sub("^", "0", downo)) %>% 
@@ -434,13 +437,10 @@ oyster_dates <- oyster_knit %>%
   mutate(entry_datetime = dmy_hms(entry_datetime),
          exit_datetime = dmy_hms(exit_datetime))
 
-
-
-ggplot(oyster_dates,
-       aes(x = entry_datetime)) +
-  geom_histogram(binwidth = 600)
-  
 ```
+
+
+#TODO: write this bit up
 
 ## Data Manipulation
 
