@@ -886,6 +886,334 @@ p <- ggplot(compare_train, aes(x = index, y = y)) + geom_line(alpha = 0.2) +
 ggplotly(p)
 ```
 
+
+
+```{r}
+pred_test <- model %>%
+  predict(X_test, batch_size = FLAGS$batch_size) %>%
+  .[, , 1]
+
+# Retransform values to original scale
+pred_test <- (pred_test * scale_history + center_history) ^2
+pred_test[1:10, 1:5] %>% print()
+compare_test <- df %>% filter(key == "testing")
+
+# build a dataframe that has both actual and predicted values
+for (i in 1:nrow(pred_test)) {
+  varname <- paste0("pred_test", i)
+  compare_test <-
+    mutate(compare_test,!!varname := c(
+      rep(NA, FLAGS$n_timesteps + i - 1),
+      pred_test[i,],
+      rep(NA, nrow(compare_test) - FLAGS$n_timesteps * 2 - i + 1)
+    ))
+}
+
+compare_test %>% write_csv(str_replace(model_path, ".hdf5", ".test.csv"))
+compare_test[FLAGS$n_timesteps:(FLAGS$n_timesteps + 10), c(2, 4:8)] %>% print()
+
+coln <- colnames(compare_test)[4:ncol(compare_test)]
+cols <- map(coln, quo(sym(.)))
+rsme_test <-
+  map_dbl(cols, function(col)
+    rmse(
+      compare_test,
+      truth = y,
+      estimate = !!col,
+      na.rm = TRUE
+    )) %>% mean()
+
+rsme_test
+```
+
+
+
+```{r}
+p <- ggplot(compare_test, aes(x = index, y = y)) + geom_line(alpha = 0.2) +
+  geom_line(aes(y = pred_test1), color = "cyan") +
+  geom_line(aes(y = pred_test50), color = "red") +
+  geom_line(aes(y = pred_test100), color = "green") +
+  geom_line(aes(y = pred_test150), color = "violet") +
+  geom_line(aes(y = pred_test200), color = "cyan") +
+  geom_line(aes(y = pred_test250), color = "red") +
+  geom_line(aes(y = pred_test300), color = "green") +
+  geom_line(aes(y = pred_test350), color = "cyan") +
+  geom_line(aes(y = pred_test400), color = "red") +
+  geom_line(aes(y = pred_test450), color = "green") +  
+  geom_line(aes(y = pred_test500), color = "cyan") +
+  geom_line(aes(y = pred_test550), color = "violet") +
+  ggtitle("Predictions on test set") +
+  theme_minimal()
+ggplotly(p)
+```
+
+
+All splits
+
+```{r}
+obtain_predictions <- function(split) {
+  df_trn <- analysis(split)[1:800, , drop = FALSE]
+  df_val <- analysis(split)[801:1200, , drop = FALSE]
+  df_tst <- assessment(split)
+  
+  df <- bind_rows(
+    df_trn %>% add_column(key = "training"),
+    df_val %>% add_column(key = "validation"),
+    df_tst %>% add_column(key = "testing")
+  ) %>%
+    as_tbl_time(index = index)
+  
+  rec_obj <- recipe(y ~ ., df) %>%
+    step_sqrt(y) %>%
+    step_center(y) %>%
+    step_scale(y) %>%
+    prep()
+  
+  df_processed_tbl <- bake(rec_obj, df)
+  
+  center_history <- rec_obj$steps[[2]]$means["y"]
+  scale_history  <- rec_obj$steps[[3]]$sds["y"]
+  
+  FLAGS <- flags(
+    flag_boolean("stateful", FALSE),
+    flag_boolean("stack_layers", FALSE),
+    flag_integer("batch_size", 10),
+    flag_integer("n_timesteps", 12),
+    flag_integer("n_epochs", 100),
+    flag_numeric("dropout", 0.2),
+    flag_numeric("recurrent_dropout", 0.2),
+    flag_string("loss", "logcosh"),
+    flag_string("optimizer_type", "sgd"),
+    flag_integer("n_units", 128),
+    flag_numeric("lr", 0.003),
+    flag_numeric("momentum", 0.9),
+    flag_integer("patience", 10)
+  )
+  
+  n_predictions <- FLAGS$n_timesteps
+  n_features <- 1
+  
+  optimizer <- switch(FLAGS$optimizer_type,
+                      sgd = optimizer_sgd(lr = FLAGS$lr, momentum = FLAGS$momentum))
+  callbacks <- list(
+    callback_early_stopping(patience = FLAGS$patience)
+  )
+  
+  train_vals <- df_processed_tbl %>%
+    filter(key == "training") %>%
+    select(y) %>%
+    pull()
+  valid_vals <- df_processed_tbl %>%
+    filter(key == "validation") %>%
+    select(y) %>%
+    pull()
+  test_vals <- df_processed_tbl %>%
+    filter(key == "testing") %>%
+    select(y) %>%
+    pull()
+  
+  train_matrix <-
+    build_matrix(train_vals, FLAGS$n_timesteps + n_predictions)
+  valid_matrix <-
+    build_matrix(valid_vals, FLAGS$n_timesteps + n_predictions)
+  test_matrix <-
+    build_matrix(test_vals, FLAGS$n_timesteps + n_predictions)
+  
+  X_train <- train_matrix[, 1:FLAGS$n_timesteps]
+  y_train <-
+    train_matrix[, (FLAGS$n_timesteps + 1):(FLAGS$n_timesteps * 2)]
+  X_train <-
+    X_train[1:(nrow(X_train) %/% FLAGS$batch_size * FLAGS$batch_size),]
+  y_train <-
+    y_train[1:(nrow(y_train) %/% FLAGS$batch_size * FLAGS$batch_size),]
+  
+  X_valid <- valid_matrix[, 1:FLAGS$n_timesteps]
+  y_valid <-
+    valid_matrix[, (FLAGS$n_timesteps + 1):(FLAGS$n_timesteps * 2)]
+  X_valid <-
+    X_valid[1:(nrow(X_valid) %/% FLAGS$batch_size * FLAGS$batch_size),]
+  y_valid <-
+    y_valid[1:(nrow(y_valid) %/% FLAGS$batch_size * FLAGS$batch_size),]
+  
+  X_test <- test_matrix[, 1:FLAGS$n_timesteps]
+  y_test <-
+    test_matrix[, (FLAGS$n_timesteps + 1):(FLAGS$n_timesteps * 2)]
+  X_test <-
+    X_test[1:(nrow(X_test) %/% FLAGS$batch_size * FLAGS$batch_size),]
+  y_test <-
+    y_test[1:(nrow(y_test) %/% FLAGS$batch_size * FLAGS$batch_size),]
+  
+  X_train <- reshape_X_3d(X_train)
+  X_valid <- reshape_X_3d(X_valid)
+  X_test <- reshape_X_3d(X_test)
+  
+  y_train <- reshape_X_3d(y_train)
+  y_valid <- reshape_X_3d(y_valid)
+  y_test <- reshape_X_3d(y_test)
+  
+  model <- keras_model_sequential()
+  
+  model %>%
+    layer_lstm(
+      units            = FLAGS$n_units,
+      batch_input_shape  = c(FLAGS$batch_size, FLAGS$n_timesteps, n_features),
+      dropout = FLAGS$dropout,
+      recurrent_dropout = FLAGS$recurrent_dropout,
+      return_sequences = TRUE
+    )     %>% time_distributed(layer_dense(units = 1))
+  
+  model %>%
+    compile(
+      loss = FLAGS$loss,
+      optimizer = optimizer,
+      metrics = list("mean_squared_error")
+    )
+  
+  model %>% fit(
+    x          = X_train,
+    y          = y_train,
+    validation_data = list(X_valid, y_valid),
+    batch_size = FLAGS$batch_size,
+    epochs     = FLAGS$n_epochs,
+    callbacks = callbacks
+  )
+  
+  
+  pred_train <- model %>%
+    predict(X_train, batch_size = FLAGS$batch_size) %>%
+    .[, , 1]
+  
+  # Retransform values
+  pred_train <- (pred_train * scale_history + center_history) ^ 2
+  compare_train <- df %>% filter(key == "training")
+  
+  for (i in 1:nrow(pred_train)) {
+    varname <- paste0("pred_train", i)
+    compare_train <-
+      mutate(compare_train, !!varname := c(
+        rep(NA, FLAGS$n_timesteps + i - 1),
+        pred_train[i, ],
+        rep(NA, nrow(compare_train) - FLAGS$n_timesteps * 2 - i + 1)
+      ))
+  }
+  
+  pred_test <- model %>%
+    predict(X_test, batch_size = FLAGS$batch_size) %>%
+    .[, , 1]
+  
+  # Retransform ys
+  pred_test <- (pred_test * scale_history + center_history) ^ 2
+  compare_test <- df %>% filter(key == "testing")
+  
+  for (i in 1:nrow(pred_test)) {
+    varname <- paste0("pred_test", i)
+    compare_test <-
+      mutate(compare_test, !!varname := c(
+        rep(NA, FLAGS$n_timesteps + i - 1),
+        pred_test[i, ],
+        rep(NA, nrow(compare_test) - FLAGS$n_timesteps * 2 - i + 1)
+      ))
+  }
+  list(train = compare_train, test = compare_test)
+  
+}
+
+all_split_preds <- rolling_origin_resamples %>%
+     mutate(predict = map(splits, obtain_predictions))
+```
+
+
+
+```{r}
+calc_rmse <- function(df) {
+  coln <- colnames(df)[4:ncol(df)]
+  cols <- map(coln, quo(sym(.)))
+  map_dbl(cols, function(col)
+    rmse(
+      df,
+      truth = y,
+      estimate = !!col,
+      na.rm = TRUE
+    )) %>% mean()
+}
+
+all_split_preds <- all_split_preds %>% unnest(predict)
+all_split_preds_train <- all_split_preds[seq(1, 11, by = 2), ]
+all_split_preds_test <- all_split_preds[seq(2, 12, by = 2), ]
+
+all_split_rmses_train <- all_split_preds_train %>%
+  mutate(rmse = map_dbl(predict, calc_rmse)) %>%
+  select(id, rmse)
+
+all_split_rmses_test <- all_split_preds_test %>%
+  mutate(rmse = map_dbl(predict, calc_rmse)) %>%
+  select(id, rmse)
+
+all_split_rmses_train
+
+all_split_rmses_train
+```
+
+
+```{r}
+plot_train <- function(slice, name) {
+  p <- ggplot(slice, aes(x = index, y = y)) + geom_line(alpha = 0.2) +
+    geom_line(aes(y = pred_train1), color = "cyan") +
+    geom_line(aes(y = pred_train50), color = "red") +
+    geom_line(aes(y = pred_train100), color = "green") +
+    geom_line(aes(y = pred_train150), color = "violet") +
+    geom_line(aes(y = pred_train200), color = "cyan") +
+    geom_line(aes(y = pred_train250), color = "red") +
+    geom_line(aes(y = pred_train300), color = "red") +
+    geom_line(aes(y = pred_train350), color = "green") +
+    geom_line(aes(y = pred_train400), color = "cyan") +
+    geom_line(aes(y = pred_train450), color = "red") +
+    geom_line(aes(y = pred_train500), color = "green") +
+    geom_line(aes(y = pred_train550), color = "violet") +
+    geom_line(aes(y = pred_train600), color = "cyan") +
+    geom_line(aes(y = pred_train650), color = "red") +
+    geom_line(aes(y = pred_train700), color = "red") +
+    geom_line(aes(y = pred_train750), color = "green") +
+    ggtitle(name)
+}
+
+train_plots <- map2(all_split_preds_train$predict, all_split_preds_train$id, plot_train)
+p_body_train  <- plot_grid(plotlist = train_plots, ncol = 3)
+p_title_train <- ggdraw() + 
+  draw_label("Backtested Predictions: Training Sets", size = 18, fontface = "bold")
+
+plot_grid(p_title_train, p_body_train, ncol = 1, rel_heights = c(0.05, 1, 0.05))
+```
+
+
+```{r}
+plot_test <- function(slice, name) {
+  ggplot(slice, aes(x = index, y = y)) + geom_line(alpha = 0.2) +
+    geom_line(aes(y = pred_test1), color = "cyan") +
+    geom_line(aes(y = pred_test50), color = "red") +
+    geom_line(aes(y = pred_test100), color = "green") +
+    geom_line(aes(y = pred_test150), color = "violet") +
+    geom_line(aes(y = pred_test200), color = "cyan") +
+    geom_line(aes(y = pred_test250), color = "red") +
+    geom_line(aes(y = pred_test300), color = "green") +
+    geom_line(aes(y = pred_test350), color = "cyan") +
+    geom_line(aes(y = pred_test400), color = "red") +
+    geom_line(aes(y = pred_test450), color = "green") +  
+    geom_line(aes(y = pred_test500), color = "cyan") +
+    geom_line(aes(y = pred_test550), color = "violet") +
+    ggtitle(name)
+}
+
+test_plots <- map2(all_split_preds_test$predict, all_split_preds_test$id, plot_test)
+
+p_body_test  <- plot_grid(plotlist = test_plots, ncol = 3)
+p_title_test <- ggdraw() + 
+  draw_label("Backtested Predictions: Test Sets", size = 18, fontface = "bold")
+
+plot_grid(p_title_test, p_body_test, ncol = 1, rel_heights = c(0.05, 1, 0.05))
+
+```
+
 ## Modelling Completely Pooled
 
 ```{r, eval=FALSE}
@@ -981,7 +1309,7 @@ p_3
 ```
 
 
-```{r}
+```{r eval = FALSE}
 
 ## TODO: time series stuff AR process, exponential CS fit, pool station data. LTSM. XGBoost
 
