@@ -423,7 +423,7 @@ duplicated_data %>%
 
 Now we 'knit' together each disparate date and time observation into a single time series. We need to do this because TFL record data for each day separately, rather than recording an observation of 0 footfall when the station is closed as we would like.
 
-To do this we exploit a little trick of `unite` that lets us place our own separator between united columns - we use "-11-09 " as our separator since this, combined with the day of the week number in `downo`, will give us a full datetime variable^[This only works because Sunday is recorded as `downo` equal to 1 and the first week in November 2009 also started on a Sunday, otherwise we'd have to shuffle `downo` values to reflect the actual day on a week in November 09].
+To do this first we exploit a little trick of `unite` that lets us place our own separator between united columns - we use "-11-09 " as our separator since this, combined with the day of the week number in `downo`, will give us a full datetime variable^[This only works because Sunday is recorded as `downo` equal to 1 and the first week in November 2009 also started on a Sunday, otherwise we'd have to shuffle `downo` values to reflect the actual day on a week in November 09].
 
 ```{r, fig.align="center"}
 oyster_knit <- oyster_underground %>%
@@ -439,10 +439,8 @@ oyster_dates <- oyster_knit %>%
 
 ```
 
+Next we aggregate observations by time and date using `group_by` followed by `as_tbl_time` to create a "time-aware" tibble. Once we've done this we find the earliest and latest datetime and create an empty time series of 0s which we combine with our Oyster data to generate observations for every time period, including those when not footfall was recorded. 
 
-#TODO: write this bit up
-
-## Data Manipulation
 
 
 ```{r}
@@ -454,56 +452,52 @@ pooled_data <- oyster_dates %>%
             fare = mean(DFare, na.rm = TRUE)) %>% 
   rename(date = entry_datetime) %>% 
   as_tbl_time(index = date)
-pooled_data
-
 
 earliest_time <- pooled_data$date %>% min()
 latest_time <- pooled_data$date %>% max()
-
-
 
 empty_ts <- create_series(earliest_time ~ latest_time, "1 minutes")
 pooled_time_data <- left_join(empty_ts, pooled_data, by = "date") %>% 
   mutate(y = ifelse(is.na(y), 0, y),
          fare = ifelse(is.na(fare), 0, fare),
          daytype = wday(date, label = TRUE))
-pooled_time_data
-
-pooled_time_data %>% 
-  ggplot(aes(x = date,
-             y = y,
-             colour = y)) + 
-  geom_point()
-
-
-
 
 pooled_weekday <- pooled_time_data %>% 
   filter(!((daytype == "Sat") | (daytype == "Sun"))) %>% 
   select(index = date, y) %>% 
   as_tbl_time(index = index)
 
-
-  ggplot(pooled_weekday,
-         aes(x = index,
-             y = y)) +
-  geom_point()
+pooled_time_data %>% 
+  ggplot(aes(x = date,
+             y = y,
+             colour = y)) + 
+  geom_point() +
+  theme_minimal() +
+  ylab("Footfall") +
+  xlab("Date") +
+  ggtitle("Total Tube Station Footfall")
 
 ```
 
+## Modelling Footfall
 
-## Very similar to this blog post
-https://blogs.rstudio.com/tensorflow/posts/2018-06-25-sunspots-lstm/
+In this section we're going to try and predict weekday footfall using an LTSM neural net - we'll draw heavily on Rstudio's Keras blog post [here](https://blogs.rstudio.com/tensorflow/posts/2018-06-25-sunspots-lstm/). In this post we're going to fit the neural net with minimal tweaks or tuning and visually inspect model results rather than formally comparing with alternative methods.
 
-```{r}
+I think there are two valid approaches from an OLS point of view in this case. We can either ignore the temporal element and bin observations up into time periods with various dummies and interactions for station closures/rush hour or we can use some sort of AR/MA model.
+
+The motivation for our LTSM approach is that I'm curious how well an out of the box, fancy neural net will compare with traditional econometric methods.
+
+
+
+Much of the code below is almost a verbatim copy from the linked article above, so be sure to check that out for a thorough explanation of what's happening here:
+
+```{r, fig.align = "center"}
 library(tidyquant)
 library(timetk)
 library(glue)
 library(cowplot)
-
 library(rsample)
-library(yardstick) 
-
+library(yardstick)
 library(recipes)
 
 periods_train <- 60 * 24 * 1.5 
@@ -582,9 +576,9 @@ rolling_origin_resamples$splits[[3]] %>%
 
 ```
 
-Now plotting the entire sampling plan
+Now plotting the entire sampling plan:
 
-```{r sampling_plan_plots}
+```{r sampling_plan_plots, fig.align="center"}
 plot_sampling_plan <- function(sampling_tbl,
                                expand_y_axis = TRUE,
                                main_data = NULL,
@@ -627,9 +621,9 @@ rolling_origin_resamples %>%
                      ncol = 3)
 ```
 
-## Creating LTSM Model
+## Single Split Model
 
-Using example split
+Here we just use the final example split to train the model:
 
 ```{r}
 example_split    <- rolling_origin_resamples$splits[[6]]
@@ -644,13 +638,14 @@ df <- bind_rows(df_trn %>% add_column(key = "training"),
                 df_val %>% add_column(key = "validation"),
                 df_tst %>% add_column(key = "testing")) %>% 
   as_tbl_time(index = index)
+
 df %>%
   head() %>% 
   kable()
 
 ```
 
-using recipes library
+The [recipes](https://tidymodels.github.io/recipes/) library is very useful for scaling and standardising data:
 ```{r}
 rec_obj <- recipe(y ~ ., df) %>% 
   step_sqrt(y) %>% 
@@ -666,7 +661,7 @@ scale_history <- rec_obj$steps[[3]]$sds["y"]
 ```
 
 
-transforming data
+This code block transforms the data into "tensors" as required by Keras/TensorFlow: 
 
 ```{r}
 
@@ -698,16 +693,14 @@ test_vals <- df_processed_tbl %>%
   select(y) %>%
   pull()
 
-# build the windowed matrices
+
 train_matrix <-
   build_matrix(train_vals, n_timesteps + n_predictions)
 valid_matrix <-
   build_matrix(valid_vals, n_timesteps + n_predictions)
 test_matrix <- build_matrix(test_vals, n_timesteps + n_predictions)
 
-# separate matrices into training and testing parts
-# also, discard last batch if there are fewer than batch_size samples
-# (a purely technical requirement)
+
 X_train <- train_matrix[, 1:n_timesteps]
 y_train <- train_matrix[, (n_timesteps + 1):(n_timesteps * 2)]
 X_train <- X_train[1:(nrow(X_train) %/% batch_size * batch_size), ]
@@ -722,7 +715,7 @@ X_test <- test_matrix[, 1:n_timesteps]
 y_test <- test_matrix[, (n_timesteps + 1):(n_timesteps * 2)]
 X_test <- X_test[1:(nrow(X_test) %/% batch_size * batch_size), ]
 y_test <- y_test[1:(nrow(y_test) %/% batch_size * batch_size), ]
-# add on the required third axis
+
 X_train <- reshape_X_3d(X_train)
 X_valid <- reshape_X_3d(X_valid)
 X_test <- reshape_X_3d(X_test)
@@ -734,7 +727,7 @@ y_test <- reshape_X_3d(y_test)
 ```
 
 
-
+Here we specify model parameters. I've left the original author's comments in here as the code is less self-explanatory - again I recommend reading the original [here.](https://blogs.rstudio.com/tensorflow/posts/2018-06-25-sunspots-lstm/)
 ```{r}
 
 library(keras)
@@ -799,6 +792,8 @@ callbacks <- list(
   callback_early_stopping(patience = FLAGS$patience)
 )
 ```
+
+Finally, we fit the model:
 
 ```{r}
 # create the model
