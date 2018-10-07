@@ -10,6 +10,7 @@ editor_options:
 
 In this post we're departing a little from replication of papers in economics and trying our hand at visualising networks followed by modelling passenger footfall across the London Underground during a week in November 2009. 
 ```{r, include = FALSE}
+library(plotly)
 library(readr)
 library(dplyr)
 library(knitr)
@@ -40,14 +41,15 @@ opts_chunk$set(echo=TRUE,
                tidy=FALSE,
                comment=NA,
                message=FALSE,
-               warning=FALSE)
+               warning=FALSE,
+               fig.align = "center")
 ```
 
 
 
 
 ## Cleaning Data
-The dataset we use comes from TFL's open data [portal](https://tfl.gov.uk/info-for/open-data-users/) and represents a random sample (I hope) of TFL's Oyster Card data during on week in November - the data provided represents approximately 5\% of all journey's during this period.
+The dataset we use comes from TFL's open data [portal](https://tfl.gov.uk/info-for/open-data-users/) and represents a random sample (I hope) of TFL's Oyster Card data during one week in November - the data provided represents approximately 5\% of all journeys during this period.
 
 
 First, we need to isolate Tube journeys from the Oyster Card CSV TFL provides. Next, we remove any journeys where we don't know the start or end station and finally we remove any journeys that have an unknown start or end time.
@@ -60,7 +62,7 @@ oyster <- read_csv('assets/Original Data/Nov09JnyExport.csv')
 oyster_underground <- oyster %>% 
   filter(SubSystem == "LUL") # LUL is the SubSystem code for Tube journeys
 rm(oyster)
-gc()
+gc(verbose = FALSE)
 
 oyster_underground <- oyster_underground %>% 
   filter(StartStn != "Unstarted") %>% 
@@ -197,7 +199,7 @@ results <- model %>% tidy()
 confints <- model %>% confint_tidy()
 estimates_intervals <- bind_cols(results, confints)
 
-estimates_intervals %>% xtable()
+estimates_intervals %>% kable(digits = 3)
 ```
 
 
@@ -500,9 +502,9 @@ library(rsample)
 library(yardstick)
 library(recipes)
 
-periods_train <- 60 * 24 * 1.5 
+periods_train <- 60 * 24 * 2
 periods_test <- 60 * 24 
-skip_span <- 60 * 1 * 10
+skip_span <- 60 * 8 
 
 rolling_origin_resamples <- rolling_origin(pooled_weekday,
                                            initial = periods_train,
@@ -626,8 +628,8 @@ rolling_origin_resamples %>%
 Here we just use the final example split to train the model:
 
 ```{r}
-example_split    <- rolling_origin_resamples$splits[[6]]
-example_split_id <- rolling_origin_resamples$id[[6]]
+example_split    <- rolling_origin_resamples$splits[[2]]
+example_split_id <- rolling_origin_resamples$id[[2]]
 
 df_trn <- analysis(example_split)[1:800, , drop = FALSE]
 df_val <- analysis(example_split)[801:1200, , drop = FALSE]
@@ -665,11 +667,10 @@ This code block transforms the data into "tensors" as required by Keras/TensorFl
 
 ```{r}
 
-n_timesteps <- 12
+n_timesteps <- 30
 n_predictions <- n_timesteps
 batch_size <- 10
 
-batch_size <-  10
 build_matrix <- function(tseries, overall_timesteps) {
   t(sapply(1:(length(tseries) - overall_timesteps + 1), function(x) 
     tseries[x:(x + overall_timesteps - 1)]))
@@ -750,7 +751,7 @@ FLAGS <- flags(
   # number of samples fed to the model in one go
   flag_integer("batch_size", 10),
   # size of the hidden state, equals size of predictions
-  flag_integer("n_timesteps", 12),
+  flag_integer("n_timesteps", 30),
   # how many epochs to train for
   flag_integer("n_epochs", 100),
   # fraction of the units to drop for the linear transformation of the inputs
@@ -832,6 +833,7 @@ history <- model %>% fit(
 
 ```
 
+
 ```{r}
 plot(history, metrics = "loss")
 
@@ -839,10 +841,6 @@ plot(history, metrics = "loss")
 pred_train <- model %>%
   predict(X_train, batch_size = FLAGS$batch_size) %>%
   .[, , 1]
-pred_train
-
-
-
 # Retransform values to original scale
 pred_train <- (pred_train * scale_history + center_history) ^2
 compare_train <- df %>% filter(key == "training")
@@ -859,6 +857,7 @@ for (i in 1:nrow(pred_train)) {
 }
 
 ```
+
 
 
 ```{r}
@@ -894,7 +893,7 @@ p <- ggplot(compare_train, aes(x = index, y = y)) + geom_line(alpha = 0.2) +
   geom_line(size = 1,aes(y = pred_train600), color = "cyan") +
   geom_line(size = 1,aes(y = pred_train650), color = "red") +
   geom_line(size = 1,aes(y = pred_train700), color = "red") +
-  geom_line(size = 1,aes(y = pred_train750), color = "green") +
+  # geom_line(size = 1,aes(y = pred_train750), color = "green") +
   ggtitle("Predictions on the training set") +
   theme_minimal()
 ggplotly(p)
@@ -902,7 +901,8 @@ ggplotly(p)
 
 
 
-```{r}
+
+```{r, eval=FALSE}
 pred_test <- model %>%
   predict(X_test, batch_size = FLAGS$batch_size) %>%
   .[, , 1]
@@ -923,7 +923,7 @@ for (i in 1:nrow(pred_test)) {
     ))
 }
 
-compare_test %>% write_csv(str_replace(model_path, ".hdf5", ".test.csv"))
+# compare_test %>% write_csv(str_replace(model_path, ".hdf5", ".test.csv"))
 compare_test[FLAGS$n_timesteps:(FLAGS$n_timesteps + 10), c(2, 4:8)] %>% print()
 
 coln <- colnames(compare_test)[4:ncol(compare_test)]
@@ -942,7 +942,7 @@ rsme_test
 
 
 
-```{r}
+```{r, eval = FALSE}
 p <- ggplot(compare_test, aes(x = index, y = y)) + geom_line(alpha = 0.2) +
   geom_line(aes(y = pred_test1), color = "cyan") +
   geom_line(aes(y = pred_test50), color = "red") +
@@ -956,432 +956,433 @@ p <- ggplot(compare_test, aes(x = index, y = y)) + geom_line(alpha = 0.2) +
   geom_line(aes(y = pred_test450), color = "green") +  
   geom_line(aes(y = pred_test500), color = "cyan") +
   geom_line(aes(y = pred_test550), color = "violet") +
+  geom_line(aes(y = pred_test1000), color = "red") +
   ggtitle("Predictions on test set") +
   theme_minimal()
 ggplotly(p)
 ```
 
 
-All splits
-
-```{r}
-obtain_predictions <- function(split) {
-  df_trn <- analysis(split)[1:800, , drop = FALSE]
-  df_val <- analysis(split)[801:1200, , drop = FALSE]
-  df_tst <- assessment(split)
-  
-  df <- bind_rows(
-    df_trn %>% add_column(key = "training"),
-    df_val %>% add_column(key = "validation"),
-    df_tst %>% add_column(key = "testing")
-  ) %>%
-    as_tbl_time(index = index)
-  
-  rec_obj <- recipe(y ~ ., df) %>%
-    step_sqrt(y) %>%
-    step_center(y) %>%
-    step_scale(y) %>%
-    prep()
-  
-  df_processed_tbl <- bake(rec_obj, df)
-  
-  center_history <- rec_obj$steps[[2]]$means["y"]
-  scale_history  <- rec_obj$steps[[3]]$sds["y"]
-  
-  FLAGS <- flags(
-    flag_boolean("stateful", FALSE),
-    flag_boolean("stack_layers", FALSE),
-    flag_integer("batch_size", 10),
-    flag_integer("n_timesteps", 12),
-    flag_integer("n_epochs", 100),
-    flag_numeric("dropout", 0.2),
-    flag_numeric("recurrent_dropout", 0.2),
-    flag_string("loss", "logcosh"),
-    flag_string("optimizer_type", "sgd"),
-    flag_integer("n_units", 128),
-    flag_numeric("lr", 0.003),
-    flag_numeric("momentum", 0.9),
-    flag_integer("patience", 10)
-  )
-  
-  n_predictions <- FLAGS$n_timesteps
-  n_features <- 1
-  
-  optimizer <- switch(FLAGS$optimizer_type,
-                      sgd = optimizer_sgd(lr = FLAGS$lr, momentum = FLAGS$momentum))
-  callbacks <- list(
-    callback_early_stopping(patience = FLAGS$patience)
-  )
-  
-  train_vals <- df_processed_tbl %>%
-    filter(key == "training") %>%
-    select(y) %>%
-    pull()
-  valid_vals <- df_processed_tbl %>%
-    filter(key == "validation") %>%
-    select(y) %>%
-    pull()
-  test_vals <- df_processed_tbl %>%
-    filter(key == "testing") %>%
-    select(y) %>%
-    pull()
-  
-  train_matrix <-
-    build_matrix(train_vals, FLAGS$n_timesteps + n_predictions)
-  valid_matrix <-
-    build_matrix(valid_vals, FLAGS$n_timesteps + n_predictions)
-  test_matrix <-
-    build_matrix(test_vals, FLAGS$n_timesteps + n_predictions)
-  
-  X_train <- train_matrix[, 1:FLAGS$n_timesteps]
-  y_train <-
-    train_matrix[, (FLAGS$n_timesteps + 1):(FLAGS$n_timesteps * 2)]
-  X_train <-
-    X_train[1:(nrow(X_train) %/% FLAGS$batch_size * FLAGS$batch_size),]
-  y_train <-
-    y_train[1:(nrow(y_train) %/% FLAGS$batch_size * FLAGS$batch_size),]
-  
-  X_valid <- valid_matrix[, 1:FLAGS$n_timesteps]
-  y_valid <-
-    valid_matrix[, (FLAGS$n_timesteps + 1):(FLAGS$n_timesteps * 2)]
-  X_valid <-
-    X_valid[1:(nrow(X_valid) %/% FLAGS$batch_size * FLAGS$batch_size),]
-  y_valid <-
-    y_valid[1:(nrow(y_valid) %/% FLAGS$batch_size * FLAGS$batch_size),]
-  
-  X_test <- test_matrix[, 1:FLAGS$n_timesteps]
-  y_test <-
-    test_matrix[, (FLAGS$n_timesteps + 1):(FLAGS$n_timesteps * 2)]
-  X_test <-
-    X_test[1:(nrow(X_test) %/% FLAGS$batch_size * FLAGS$batch_size),]
-  y_test <-
-    y_test[1:(nrow(y_test) %/% FLAGS$batch_size * FLAGS$batch_size),]
-  
-  X_train <- reshape_X_3d(X_train)
-  X_valid <- reshape_X_3d(X_valid)
-  X_test <- reshape_X_3d(X_test)
-  
-  y_train <- reshape_X_3d(y_train)
-  y_valid <- reshape_X_3d(y_valid)
-  y_test <- reshape_X_3d(y_test)
-  
-  model <- keras_model_sequential()
-  
-  model %>%
-    layer_lstm(
-      units            = FLAGS$n_units,
-      batch_input_shape  = c(FLAGS$batch_size, FLAGS$n_timesteps, n_features),
-      dropout = FLAGS$dropout,
-      recurrent_dropout = FLAGS$recurrent_dropout,
-      return_sequences = TRUE
-    )     %>% time_distributed(layer_dense(units = 1))
-  
-  model %>%
-    compile(
-      loss = FLAGS$loss,
-      optimizer = optimizer,
-      metrics = list("mean_squared_error")
-    )
-  
-  model %>% fit(
-    x          = X_train,
-    y          = y_train,
-    validation_data = list(X_valid, y_valid),
-    batch_size = FLAGS$batch_size,
-    epochs     = FLAGS$n_epochs,
-    callbacks = callbacks
-  )
-  
-  
-  pred_train <- model %>%
-    predict(X_train, batch_size = FLAGS$batch_size) %>%
-    .[, , 1]
-  
-  # Retransform values
-  pred_train <- (pred_train * scale_history + center_history) ^ 2
-  compare_train <- df %>% filter(key == "training")
-  
-  for (i in 1:nrow(pred_train)) {
-    varname <- paste0("pred_train", i)
-    compare_train <-
-      mutate(compare_train, !!varname := c(
-        rep(NA, FLAGS$n_timesteps + i - 1),
-        pred_train[i, ],
-        rep(NA, nrow(compare_train) - FLAGS$n_timesteps * 2 - i + 1)
-      ))
-  }
-  
-  pred_test <- model %>%
-    predict(X_test, batch_size = FLAGS$batch_size) %>%
-    .[, , 1]
-  
-  # Retransform ys
-  pred_test <- (pred_test * scale_history + center_history) ^ 2
-  compare_test <- df %>% filter(key == "testing")
-  
-  for (i in 1:nrow(pred_test)) {
-    varname <- paste0("pred_test", i)
-    compare_test <-
-      mutate(compare_test, !!varname := c(
-        rep(NA, FLAGS$n_timesteps + i - 1),
-        pred_test[i, ],
-        rep(NA, nrow(compare_test) - FLAGS$n_timesteps * 2 - i + 1)
-      ))
-  }
-  list(train = compare_train, test = compare_test)
-  
-}
-
-all_split_preds <- rolling_origin_resamples %>%
-     mutate(predict = map(splits, obtain_predictions))
-```
-
-
-
-```{r}
-calc_rmse <- function(df) {
-  coln <- colnames(df)[4:ncol(df)]
-  cols <- map(coln, quo(sym(.)))
-  map_dbl(cols, function(col)
-    rmse(
-      df,
-      truth = y,
-      estimate = !!col,
-      na.rm = TRUE
-    )) %>% mean()
-}
-
-all_split_preds <- all_split_preds %>% unnest(predict)
-all_split_preds_train <- all_split_preds[seq(1, 11, by = 2), ]
-all_split_preds_test <- all_split_preds[seq(2, 12, by = 2), ]
-
-all_split_rmses_train <- all_split_preds_train %>%
-  mutate(rmse = map_dbl(predict, calc_rmse)) %>%
-  select(id, rmse)
-
-all_split_rmses_test <- all_split_preds_test %>%
-  mutate(rmse = map_dbl(predict, calc_rmse)) %>%
-  select(id, rmse)
-
-all_split_rmses_train
-
-all_split_rmses_train
-```
-
-
-```{r}
-plot_train <- function(slice, name) {
-  p <- ggplot(slice, aes(x = index, y = y)) + geom_line(alpha = 0.2) +
-    geom_line(aes(y = pred_train1), color = "cyan") +
-    geom_line(aes(y = pred_train50), color = "red") +
-    geom_line(aes(y = pred_train100), color = "green") +
-    geom_line(aes(y = pred_train150), color = "violet") +
-    geom_line(aes(y = pred_train200), color = "cyan") +
-    geom_line(aes(y = pred_train250), color = "red") +
-    geom_line(aes(y = pred_train300), color = "red") +
-    geom_line(aes(y = pred_train350), color = "green") +
-    geom_line(aes(y = pred_train400), color = "cyan") +
-    geom_line(aes(y = pred_train450), color = "red") +
-    geom_line(aes(y = pred_train500), color = "green") +
-    geom_line(aes(y = pred_train550), color = "violet") +
-    geom_line(aes(y = pred_train600), color = "cyan") +
-    geom_line(aes(y = pred_train650), color = "red") +
-    geom_line(aes(y = pred_train700), color = "red") +
-    geom_line(aes(y = pred_train750), color = "green") +
-    ggtitle(name)
-}
-
-train_plots <- map2(all_split_preds_train$predict, all_split_preds_train$id, plot_train)
-p_body_train  <- plot_grid(plotlist = train_plots, ncol = 3)
-p_title_train <- ggdraw() + 
-  draw_label("Backtested Predictions: Training Sets", size = 18, fontface = "bold")
-
-plot_grid(p_title_train, p_body_train, ncol = 1, rel_heights = c(0.05, 1, 0.05))
-```
-
-
-```{r}
-plot_test <- function(slice, name) {
-  ggplot(slice, aes(x = index, y = y)) + geom_line(alpha = 0.2) +
-    geom_line(aes(y = pred_test1), color = "cyan") +
-    geom_line(aes(y = pred_test50), color = "red") +
-    geom_line(aes(y = pred_test100), color = "green") +
-    geom_line(aes(y = pred_test150), color = "violet") +
-    geom_line(aes(y = pred_test200), color = "cyan") +
-    geom_line(aes(y = pred_test250), color = "red") +
-    geom_line(aes(y = pred_test300), color = "green") +
-    geom_line(aes(y = pred_test350), color = "cyan") +
-    geom_line(aes(y = pred_test400), color = "red") +
-    geom_line(aes(y = pred_test450), color = "green") +  
-    geom_line(aes(y = pred_test500), color = "cyan") +
-    geom_line(aes(y = pred_test550), color = "violet") +
-    ggtitle(name)
-}
-
-test_plots <- map2(all_split_preds_test$predict, all_split_preds_test$id, plot_test)
-
-p_body_test  <- plot_grid(plotlist = test_plots, ncol = 3)
-p_title_test <- ggdraw() + 
-  draw_label("Backtested Predictions: Test Sets", size = 18, fontface = "bold")
-
-plot_grid(p_title_test, p_body_test, ncol = 1, rel_heights = c(0.05, 1, 0.05))
-
-```
-
-## Modelling Completely Pooled
-
-```{r, eval=FALSE}
-library(tibbletime)
-library(dynlm)
-
-
-pooled_data_original <- oyster_underground_lubridate %>% 
-    filter(daytype != "Sat" & daytype != "Sun") %>% 
-  group_by(EntTimeHHMM, EntTime, daytype) %>% 
-  summarise(y = n()) %>% 
-  as_tbl_time(index = EntTimeHHMM)
-
-pooled_data_manipulated <- pooled_data_original %>% 
-  group_by(daytype) %>% 
-  mutate(y_diff = y - lag(y))
-
-pooled_monday <- pooled_data_manipulated %>% 
-  filter(daytype == "Mon")
-
-pooled_train <- pooled_data_manipulated %>% 
-  filter(daytype != "Mon")
-
-ggplot(pooled_train %>% 
-         filter(daytype == "Tue"),
-       aes(x = EntTimeHHMM,
-           y = y_diff)) +
-  geom_point()
-
-model_0 <- glm(y ~ EntTime,
-              data = pooled_train,
-              family = poisson)
-summary(model_0)
-
-preds <- predict(model_0,
-                newdata = pooled_monday %>% 
-                  select(EntTime))
-pooled_monday$predictions <- preds
-
-ggplot(pooled_monday,
-       aes(x = EntTimeHHMM,
-           y = y)) +
-  geom_point() +
-  geom_point(aes(x = EntTimeHHMM,
-                 y = predictions), colour = 'red')
-
-
-
-model_1 <- lm(y_diff ~ EntTimeHHMM,
-               data = pooled_train)
-
-summary(model_1)
-
-## Creating lags
-# pooled_data <- pooled_data %>%  
-#   group_by(StartStn) %>% 
-#   mutate(y_d = y - lag(y)) %>% 
-#   ungroup()
-
-simple_ar_1 <- dynlm(d(y) ~ L(y, 1),
-                      data = pooled_data %>% 
-                       select(y) %>% 
-                       as.zoo())
-summary(simple_ar_1)
-
-
-p_1 <- ggplot(pooled_data,
-       aes(x = EntTimeHHMM,
-           y = y_d)) +
-  geom_point()
-
-p_1
-
-p_2 <- ggplot(pooled_data,
-              aes(x = EntTimeHHMM,
-                  y = y)) +
-  geom_line()
-p_2
-
-subplot(p_1, p_2)
-
-
-p_3 <- ggplot(pooled_data,
-              aes(x = EntTimeHHMM,
-                  y = y_d*10)) +
-  geom_point(alpha = 0.2) +
-  geom_line(aes(x = EntTimeHHMM,
-                y = y))
-p_3
-
-
-
-```
-
-
-```{r eval = FALSE}
-
-## TODO: time series stuff AR process, exponential CS fit, pool station data. LTSM. XGBoost
-
-## plot y histogram
-
-
-
-
-
-stan_data <- oyster_underground_lubridate %>%
-  filter(StartStn == "Waterloo JLE") %>% 
-  filter(daytype != "Sat" | daytype != "Sun") %>% 
-  group_by(EntTimeHHMM, EntTime) %>% 
-  summarise(y = n()) %>% 
-  mutate(post_lunch = ifelse(test = (EntTimeHHMM >= hms("12:00:00")),
-                             1, 2))
-
-stan_data
-
-ggplot(stan_data,
-       aes(y)) +
-  geom_histogram(bins = 60)
-
-
-
-stan_data %>% 
-  ggplot(aes(x = EntTimeHHMM, y = y)) +
-  geom_point() +
-  theme_minimal()
-
-
-ed <- lm(data = stan_data,formula =  y ~ EntTime)
-ed %>% summary()
-
-library(rstanarm)
-options(mc.cores = parallel::detectCores())
-ed_two <- stan_glmer(data = stan_data,
-                   y ~ 1 | post_lunch,
-                   family = poisson,
-                   control = list(adapt_delta = 0.99))
-
-ed_two %>% launch_shinystan()
-
-library(rstan)
-library(shinystan)
-
-stan_data_list <- list(y = stan_data$y,
-               N = nrow(stan_data),
-               id = stan_data$post_lunch,
-               L = 2)
-
-model <- stan('_posts/waterloo_footfall_hierarchical_2.stan',
-              data = stan_data_list,
-              control = list(adapt_delta = 0.999))
-
-model %>% launch_shinystan()
-
-
-  
-
-```
+<!-- All splits -->
+
+<!-- ```{r} -->
+<!-- obtain_predictions <- function(split) { -->
+<!--   df_trn <- analysis(split)[1:800, , drop = FALSE] -->
+<!--   df_val <- analysis(split)[801:1200, , drop = FALSE] -->
+<!--   df_tst <- assessment(split) -->
+
+<!--   df <- bind_rows( -->
+<!--     df_trn %>% add_column(key = "training"), -->
+<!--     df_val %>% add_column(key = "validation"), -->
+<!--     df_tst %>% add_column(key = "testing") -->
+<!--   ) %>% -->
+<!--     as_tbl_time(index = index) -->
+
+<!--   rec_obj <- recipe(y ~ ., df) %>% -->
+<!--     step_sqrt(y) %>% -->
+<!--     step_center(y) %>% -->
+<!--     step_scale(y) %>% -->
+<!--     prep() -->
+
+<!--   df_processed_tbl <- bake(rec_obj, df) -->
+
+<!--   center_history <- rec_obj$steps[[2]]$means["y"] -->
+<!--   scale_history  <- rec_obj$steps[[3]]$sds["y"] -->
+
+<!--   FLAGS <- flags( -->
+<!--     flag_boolean("stateful", FALSE), -->
+<!--     flag_boolean("stack_layers", FALSE), -->
+<!--     flag_integer("batch_size", 10), -->
+<!--     flag_integer("n_timesteps", 12), -->
+<!--     flag_integer("n_epochs", 100), -->
+<!--     flag_numeric("dropout", 0.2), -->
+<!--     flag_numeric("recurrent_dropout", 0.2), -->
+<!--     flag_string("loss", "logcosh"), -->
+<!--     flag_string("optimizer_type", "sgd"), -->
+<!--     flag_integer("n_units", 128), -->
+<!--     flag_numeric("lr", 0.003), -->
+<!--     flag_numeric("momentum", 0.9), -->
+<!--     flag_integer("patience", 10) -->
+<!--   ) -->
+
+<!--   n_predictions <- FLAGS$n_timesteps -->
+<!--   n_features <- 1 -->
+
+<!--   optimizer <- switch(FLAGS$optimizer_type, -->
+<!--                       sgd = optimizer_sgd(lr = FLAGS$lr, momentum = FLAGS$momentum)) -->
+<!--   callbacks <- list( -->
+<!--     callback_early_stopping(patience = FLAGS$patience) -->
+<!--   ) -->
+
+<!--   train_vals <- df_processed_tbl %>% -->
+<!--     filter(key == "training") %>% -->
+<!--     select(y) %>% -->
+<!--     pull() -->
+<!--   valid_vals <- df_processed_tbl %>% -->
+<!--     filter(key == "validation") %>% -->
+<!--     select(y) %>% -->
+<!--     pull() -->
+<!--   test_vals <- df_processed_tbl %>% -->
+<!--     filter(key == "testing") %>% -->
+<!--     select(y) %>% -->
+<!--     pull() -->
+
+<!--   train_matrix <- -->
+<!--     build_matrix(train_vals, FLAGS$n_timesteps + n_predictions) -->
+<!--   valid_matrix <- -->
+<!--     build_matrix(valid_vals, FLAGS$n_timesteps + n_predictions) -->
+<!--   test_matrix <- -->
+<!--     build_matrix(test_vals, FLAGS$n_timesteps + n_predictions) -->
+
+<!--   X_train <- train_matrix[, 1:FLAGS$n_timesteps] -->
+<!--   y_train <- -->
+<!--     train_matrix[, (FLAGS$n_timesteps + 1):(FLAGS$n_timesteps * 2)] -->
+<!--   X_train <- -->
+<!--     X_train[1:(nrow(X_train) %/% FLAGS$batch_size * FLAGS$batch_size),] -->
+<!--   y_train <- -->
+<!--     y_train[1:(nrow(y_train) %/% FLAGS$batch_size * FLAGS$batch_size),] -->
+
+<!--   X_valid <- valid_matrix[, 1:FLAGS$n_timesteps] -->
+<!--   y_valid <- -->
+<!--     valid_matrix[, (FLAGS$n_timesteps + 1):(FLAGS$n_timesteps * 2)] -->
+<!--   X_valid <- -->
+<!--     X_valid[1:(nrow(X_valid) %/% FLAGS$batch_size * FLAGS$batch_size),] -->
+<!--   y_valid <- -->
+<!--     y_valid[1:(nrow(y_valid) %/% FLAGS$batch_size * FLAGS$batch_size),] -->
+
+<!--   X_test <- test_matrix[, 1:FLAGS$n_timesteps] -->
+<!--   y_test <- -->
+<!--     test_matrix[, (FLAGS$n_timesteps + 1):(FLAGS$n_timesteps * 2)] -->
+<!--   X_test <- -->
+<!--     X_test[1:(nrow(X_test) %/% FLAGS$batch_size * FLAGS$batch_size),] -->
+<!--   y_test <- -->
+<!--     y_test[1:(nrow(y_test) %/% FLAGS$batch_size * FLAGS$batch_size),] -->
+
+<!--   X_train <- reshape_X_3d(X_train) -->
+<!--   X_valid <- reshape_X_3d(X_valid) -->
+<!--   X_test <- reshape_X_3d(X_test) -->
+
+<!--   y_train <- reshape_X_3d(y_train) -->
+<!--   y_valid <- reshape_X_3d(y_valid) -->
+<!--   y_test <- reshape_X_3d(y_test) -->
+
+<!--   model <- keras_model_sequential() -->
+
+<!--   model %>% -->
+<!--     layer_lstm( -->
+<!--       units            = FLAGS$n_units, -->
+<!--       batch_input_shape  = c(FLAGS$batch_size, FLAGS$n_timesteps, n_features), -->
+<!--       dropout = FLAGS$dropout, -->
+<!--       recurrent_dropout = FLAGS$recurrent_dropout, -->
+<!--       return_sequences = TRUE -->
+<!--     )     %>% time_distributed(layer_dense(units = 1)) -->
+
+<!--   model %>% -->
+<!--     compile( -->
+<!--       loss = FLAGS$loss, -->
+<!--       optimizer = optimizer, -->
+<!--       metrics = list("mean_squared_error") -->
+<!--     ) -->
+
+<!--   model %>% fit( -->
+<!--     x          = X_train, -->
+<!--     y          = y_train, -->
+<!--     validation_data = list(X_valid, y_valid), -->
+<!--     batch_size = FLAGS$batch_size, -->
+<!--     epochs     = FLAGS$n_epochs, -->
+<!--     callbacks = callbacks -->
+<!--   ) -->
+
+
+<!--   pred_train <- model %>% -->
+<!--     predict(X_train, batch_size = FLAGS$batch_size) %>% -->
+<!--     .[, , 1] -->
+
+<!--   # Retransform values -->
+<!--   pred_train <- (pred_train * scale_history + center_history) ^ 2 -->
+<!--   compare_train <- df %>% filter(key == "training") -->
+
+<!--   for (i in 1:nrow(pred_train)) { -->
+<!--     varname <- paste0("pred_train", i) -->
+<!--     compare_train <- -->
+<!--       mutate(compare_train, !!varname := c( -->
+<!--         rep(NA, FLAGS$n_timesteps + i - 1), -->
+<!--         pred_train[i, ], -->
+<!--         rep(NA, nrow(compare_train) - FLAGS$n_timesteps * 2 - i + 1) -->
+<!--       )) -->
+<!--   } -->
+
+<!--   pred_test <- model %>% -->
+<!--     predict(X_test, batch_size = FLAGS$batch_size) %>% -->
+<!--     .[, , 1] -->
+
+<!--   # Retransform ys -->
+<!--   pred_test <- (pred_test * scale_history + center_history) ^ 2 -->
+<!--   compare_test <- df %>% filter(key == "testing") -->
+
+<!--   for (i in 1:nrow(pred_test)) { -->
+<!--     varname <- paste0("pred_test", i) -->
+<!--     compare_test <- -->
+<!--       mutate(compare_test, !!varname := c( -->
+<!--         rep(NA, FLAGS$n_timesteps + i - 1), -->
+<!--         pred_test[i, ], -->
+<!--         rep(NA, nrow(compare_test) - FLAGS$n_timesteps * 2 - i + 1) -->
+<!--       )) -->
+<!--   } -->
+<!--   list(train = compare_train, test = compare_test) -->
+
+<!-- } -->
+
+<!-- all_split_preds <- rolling_origin_resamples %>% -->
+<!--      mutate(predict = map(splits, obtain_predictions)) -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- calc_rmse <- function(df) { -->
+<!--   coln <- colnames(df)[4:ncol(df)] -->
+<!--   cols <- map(coln, quo(sym(.))) -->
+<!--   map_dbl(cols, function(col) -->
+<!--     rmse( -->
+<!--       df, -->
+<!--       truth = y, -->
+<!--       estimate = !!col, -->
+<!--       na.rm = TRUE -->
+<!--     )) %>% mean() -->
+<!-- } -->
+
+<!-- all_split_preds <- all_split_preds %>% unnest(predict) -->
+<!-- all_split_preds_train <- all_split_preds[seq(1, 11, by = 2), ] -->
+<!-- all_split_preds_test <- all_split_preds[seq(2, 12, by = 2), ] -->
+
+<!-- all_split_rmses_train <- all_split_preds_train %>% -->
+<!--   mutate(rmse = map_dbl(predict, calc_rmse)) %>% -->
+<!--   select(id, rmse) -->
+
+<!-- all_split_rmses_test <- all_split_preds_test %>% -->
+<!--   mutate(rmse = map_dbl(predict, calc_rmse)) %>% -->
+<!--   select(id, rmse) -->
+
+<!-- all_split_rmses_train -->
+
+<!-- all_split_rmses_train -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- plot_train <- function(slice, name) { -->
+<!--   p <- ggplot(slice, aes(x = index, y = y)) + geom_line(alpha = 0.2) + -->
+<!--     geom_line(aes(y = pred_train1), color = "cyan") + -->
+<!--     geom_line(aes(y = pred_train50), color = "red") + -->
+<!--     geom_line(aes(y = pred_train100), color = "green") + -->
+<!--     geom_line(aes(y = pred_train150), color = "violet") + -->
+<!--     geom_line(aes(y = pred_train200), color = "cyan") + -->
+<!--     geom_line(aes(y = pred_train250), color = "red") + -->
+<!--     geom_line(aes(y = pred_train300), color = "red") + -->
+<!--     geom_line(aes(y = pred_train350), color = "green") + -->
+<!--     geom_line(aes(y = pred_train400), color = "cyan") + -->
+<!--     geom_line(aes(y = pred_train450), color = "red") + -->
+<!--     geom_line(aes(y = pred_train500), color = "green") + -->
+<!--     geom_line(aes(y = pred_train550), color = "violet") + -->
+<!--     geom_line(aes(y = pred_train600), color = "cyan") + -->
+<!--     geom_line(aes(y = pred_train650), color = "red") + -->
+<!--     geom_line(aes(y = pred_train700), color = "red") + -->
+<!--     geom_line(aes(y = pred_train750), color = "green") + -->
+<!--     ggtitle(name) -->
+<!-- } -->
+
+<!-- train_plots <- map2(all_split_preds_train$predict, all_split_preds_train$id, plot_train) -->
+<!-- p_body_train  <- plot_grid(plotlist = train_plots, ncol = 3) -->
+<!-- p_title_train <- ggdraw() +  -->
+<!--   draw_label("Backtested Predictions: Training Sets", size = 18, fontface = "bold") -->
+
+<!-- plot_grid(p_title_train, p_body_train, ncol = 1, rel_heights = c(0.05, 1, 0.05)) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- plot_test <- function(slice, name) { -->
+<!--   ggplot(slice, aes(x = index, y = y)) + geom_line(alpha = 0.2) + -->
+<!--     geom_line(aes(y = pred_test1), color = "cyan") + -->
+<!--     geom_line(aes(y = pred_test50), color = "red") + -->
+<!--     geom_line(aes(y = pred_test100), color = "green") + -->
+<!--     geom_line(aes(y = pred_test150), color = "violet") + -->
+<!--     geom_line(aes(y = pred_test200), color = "cyan") + -->
+<!--     geom_line(aes(y = pred_test250), color = "red") + -->
+<!--     geom_line(aes(y = pred_test300), color = "green") + -->
+<!--     geom_line(aes(y = pred_test350), color = "cyan") + -->
+<!--     geom_line(aes(y = pred_test400), color = "red") + -->
+<!--     geom_line(aes(y = pred_test450), color = "green") +   -->
+<!--     geom_line(aes(y = pred_test500), color = "cyan") + -->
+<!--     geom_line(aes(y = pred_test550), color = "violet") + -->
+<!--     ggtitle(name) -->
+<!-- } -->
+
+<!-- test_plots <- map2(all_split_preds_test$predict, all_split_preds_test$id, plot_test) -->
+
+<!-- p_body_test  <- plot_grid(plotlist = test_plots, ncol = 3) -->
+<!-- p_title_test <- ggdraw() +  -->
+<!--   draw_label("Backtested Predictions: Test Sets", size = 18, fontface = "bold") -->
+
+<!-- plot_grid(p_title_test, p_body_test, ncol = 1, rel_heights = c(0.05, 1, 0.05)) -->
+
+<!-- ``` -->
+
+<!-- ## Modelling Completely Pooled -->
+
+<!-- ```{r, eval=FALSE} -->
+<!-- library(tibbletime) -->
+<!-- library(dynlm) -->
+
+
+<!-- pooled_data_original <- oyster_underground_lubridate %>%  -->
+<!--     filter(daytype != "Sat" & daytype != "Sun") %>%  -->
+<!--   group_by(EntTimeHHMM, EntTime, daytype) %>%  -->
+<!--   summarise(y = n()) %>%  -->
+<!--   as_tbl_time(index = EntTimeHHMM) -->
+
+<!-- pooled_data_manipulated <- pooled_data_original %>%  -->
+<!--   group_by(daytype) %>%  -->
+<!--   mutate(y_diff = y - lag(y)) -->
+
+<!-- pooled_monday <- pooled_data_manipulated %>%  -->
+<!--   filter(daytype == "Mon") -->
+
+<!-- pooled_train <- pooled_data_manipulated %>%  -->
+<!--   filter(daytype != "Mon") -->
+
+<!-- ggplot(pooled_train %>%  -->
+<!--          filter(daytype == "Tue"), -->
+<!--        aes(x = EntTimeHHMM, -->
+<!--            y = y_diff)) + -->
+<!--   geom_point() -->
+
+<!-- model_0 <- glm(y ~ EntTime, -->
+<!--               data = pooled_train, -->
+<!--               family = poisson) -->
+<!-- summary(model_0) -->
+
+<!-- preds <- predict(model_0, -->
+<!--                 newdata = pooled_monday %>%  -->
+<!--                   select(EntTime)) -->
+<!-- pooled_monday$predictions <- preds -->
+
+<!-- ggplot(pooled_monday, -->
+<!--        aes(x = EntTimeHHMM, -->
+<!--            y = y)) + -->
+<!--   geom_point() + -->
+<!--   geom_point(aes(x = EntTimeHHMM, -->
+<!--                  y = predictions), colour = 'red') -->
+
+
+
+<!-- model_1 <- lm(y_diff ~ EntTimeHHMM, -->
+<!--                data = pooled_train) -->
+
+<!-- summary(model_1) -->
+
+<!-- ## Creating lags -->
+<!-- # pooled_data <- pooled_data %>%   -->
+<!-- #   group_by(StartStn) %>%  -->
+<!-- #   mutate(y_d = y - lag(y)) %>%  -->
+<!-- #   ungroup() -->
+
+<!-- simple_ar_1 <- dynlm(d(y) ~ L(y, 1), -->
+<!--                       data = pooled_data %>%  -->
+<!--                        select(y) %>%  -->
+<!--                        as.zoo()) -->
+<!-- summary(simple_ar_1) -->
+
+
+<!-- p_1 <- ggplot(pooled_data, -->
+<!--        aes(x = EntTimeHHMM, -->
+<!--            y = y_d)) + -->
+<!--   geom_point() -->
+
+<!-- p_1 -->
+
+<!-- p_2 <- ggplot(pooled_data, -->
+<!--               aes(x = EntTimeHHMM, -->
+<!--                   y = y)) + -->
+<!--   geom_line() -->
+<!-- p_2 -->
+
+<!-- subplot(p_1, p_2) -->
+
+
+<!-- p_3 <- ggplot(pooled_data, -->
+<!--               aes(x = EntTimeHHMM, -->
+<!--                   y = y_d*10)) + -->
+<!--   geom_point(alpha = 0.2) + -->
+<!--   geom_line(aes(x = EntTimeHHMM, -->
+<!--                 y = y)) -->
+<!-- p_3 -->
+
+
+
+<!-- ``` -->
+
+
+<!-- ```{r eval = FALSE} -->
+
+<!-- ## TODO: time series stuff AR process, exponential CS fit, pool station data. LTSM. XGBoost -->
+
+<!-- ## plot y histogram -->
+
+
+
+
+
+<!-- stan_data <- oyster_underground_lubridate %>% -->
+<!--   filter(StartStn == "Waterloo JLE") %>%  -->
+<!--   filter(daytype != "Sat" | daytype != "Sun") %>%  -->
+<!--   group_by(EntTimeHHMM, EntTime) %>%  -->
+<!--   summarise(y = n()) %>%  -->
+<!--   mutate(post_lunch = ifelse(test = (EntTimeHHMM >= hms("12:00:00")), -->
+<!--                              1, 2)) -->
+
+<!-- stan_data -->
+
+<!-- ggplot(stan_data, -->
+<!--        aes(y)) + -->
+<!--   geom_histogram(bins = 60) -->
+
+
+
+<!-- stan_data %>%  -->
+<!--   ggplot(aes(x = EntTimeHHMM, y = y)) + -->
+<!--   geom_point() + -->
+<!--   theme_minimal() -->
+
+
+<!-- ed <- lm(data = stan_data,formula =  y ~ EntTime) -->
+<!-- ed %>% summary() -->
+
+<!-- library(rstanarm) -->
+<!-- options(mc.cores = parallel::detectCores()) -->
+<!-- ed_two <- stan_glmer(data = stan_data, -->
+<!--                    y ~ 1 | post_lunch, -->
+<!--                    family = poisson, -->
+<!--                    control = list(adapt_delta = 0.99)) -->
+
+<!-- ed_two %>% launch_shinystan() -->
+
+<!-- library(rstan) -->
+<!-- library(shinystan) -->
+
+<!-- stan_data_list <- list(y = stan_data$y, -->
+<!--                N = nrow(stan_data), -->
+<!--                id = stan_data$post_lunch, -->
+<!--                L = 2) -->
+
+<!-- model <- stan('_posts/waterloo_footfall_hierarchical_2.stan', -->
+<!--               data = stan_data_list, -->
+<!--               control = list(adapt_delta = 0.999)) -->
+
+<!-- model %>% launch_shinystan() -->
+
+
+
+
+<!-- ``` -->
