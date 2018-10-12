@@ -8,7 +8,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-In this post we're departing a little from replication of papers in economics and trying our hand at visualising networks followed by modelling passenger footfall across the London Underground during a week in November 2009. We'll very briefly explore two different methods to predict passenger footfall, an LTSM neural net identical to a recent Rstudio Keras blogpost and Facebook's Prophet forecasting library. We will be visuallising model results without making explicit formal comparisons between the two. 
+In this post we're departing a little from replication of papers in economics and trying our hand at visualising networks followed by modelling passenger footfall across the London Underground during a week in November 2009. We'll very briefly explore two different methods to predict passenger footfall, an LTSM neural net identical to a recent Rstudio Keras blogpost and Facebook's Prophet forecasting library. We will be visualising model results without making explicit formal comparisons between the two. 
 
 ```{r, include = FALSE}
 library(plotly)
@@ -361,7 +361,7 @@ ggraph(oyster_journeys, layout = "fr") +
 ```
 
 
-## Visuallising Footfall
+## Visualising Footfall
 
 In this section we'll explore how to predict Tube footfall using a number of different techniques, rather than drilling down on one particular method we'll briefly compare model performance.
 
@@ -484,13 +484,7 @@ pooled_time_data %>%
 
 ## Modelling Footfall
 
-In this section we're going to try and predict weekday footfall using an LTSM neural net - we'll draw heavily on Rstudio's Keras blog post [here](https://blogs.rstudio.com/tensorflow/posts/2018-06-25-sunspots-lstm/). In this post we're going to fit the neural net with minimal tweaks or tuning and visually inspect model results rather than formally comparing with alternative methods.
-
-I think there are two valid approaches from an OLS point of view in this case. We can either ignore the temporal element and bin observations up into time periods with various dummies and interactions for station closures/rush hour or we can use some sort of AR/MA model.
-
-The motivation for our LTSM approach is that I'm curious how well an out of the box, fancy neural net will compare with traditional econometric methods.
-
-
+In this section we're going to try and predict weekday footfall using two methods. First, we're going to use an LTSM neural net - we'll draw heavily on Rstudio's Keras blog post [here](https://blogs.rstudio.com/tensorflow/posts/2018-06-25-sunspots-lstm/). We're going to fit the neural net with minimal tweaks or tuning and visually inspect model results rather than formally comparing with alternative methods. Second, we'll use Facebook's Prophet library to estimate footfall too. Both of these models we'll use pretty much straight out of the box - this is definitely a brief overview rather than in-depth exploration.^[For instance, I think there are far better ways to model this data and multiple improvements we could use such as a Poisson loss metric/likelihood.]
 
 Much of the code below is almost a verbatim copy from the linked article above, so be sure to check that out for a thorough explanation of what's happening here:
 
@@ -579,7 +573,7 @@ rolling_origin_resamples$splits[[1]] %>%
 
 ```
 
-Now plotting the entire sampling plan:
+Now we plot the entire sampling plan:
 
 ```{r sampling_plan_plots, fig.align="center"}
 plot_sampling_plan <- function(sampling_tbl,
@@ -624,9 +618,11 @@ rolling_origin_resamples %>%
                      ncol = 3)
 ```
 
+Originally, I'd intended to use cross-validation and fit 6 LTSM models however this became far too time consuming and on reflection each fold is very similar to the other folds since we have only one week's worth of observations. Therefore, we'll only be using the initial example split throughout the rest of this post.
+
 ## Single Split Model
 
-Here we just use an example split to train the model:
+Creating the single example split to train the model:
 
 ```{r}
 example_split    <- rolling_origin_resamples$splits[[1]]
@@ -649,7 +645,7 @@ df %>%
 
 ```
 
-The [recipes](https://tidymodels.github.io/recipes/) library is very useful for scaling and standardising data:
+Here we use the [recipes](https://tidymodels.github.io/recipes/) library to scale and standardise the data, being sure to save the mean and standard deviation used for later:
 ```{r}
 rec_obj <- recipe(y ~ ., df) %>% 
   step_sqrt(y) %>% 
@@ -665,7 +661,7 @@ scale_history <- rec_obj$steps[[3]]$sds["y"]
 ```
 
 
-This code block transforms the data into "tensors" as required by Keras/TensorFlow: 
+This code block transforms the data into "tensors" as required by Keras/TensorFlow - this section is a little intense: 
 
 ```{r}
 
@@ -837,7 +833,7 @@ history <- model %>% fit(
 ```
 
 
-Loss plots:
+Now we create loss plots and a comparison dataframe:
 
 ```{r, fig.align="center"}
 plot(history, metrics = "loss")
@@ -863,9 +859,10 @@ for (i in 1:nrow(pred_train)) {
 
 ```
 
+Googling suggests that if training loss is above validation loss it indicates that the training set is much harder to predict than our validation set - I think that the footfall 0s during closing hours are causing this rather than any coding/modelling errors on my part but I could be very wrong.
 
 
-Loss metrics
+Here we calculate the root mean squared error of the model using the training data - note the use of `quo` and `!!` necessary with the tidyverse's quasiquotation philosophy.
 ```{r}
 coln <- colnames(compare_train)[4:ncol(compare_train)]
 cols <- map(coln, quo(sym(.)))
@@ -881,7 +878,7 @@ rsme_train <-
 rsme_train
 ```
 
-Training visuals
+Here I depart from the RStudio blog post and transform the data into a long format which makes plotting significantly easier. I'm quite lazy here and use `separate` rather than `gsub` and regex to remove unwanted strings.
 
 ```{r, fig.align="center"}
 
@@ -909,7 +906,9 @@ p <- ggplot(compare_train_long_filtered,
 p
 ```
 
-Testing RMSE
+Visually it looks like the model does a pretty good job of predicting the next hour's footfall based off current footfall. It's a little disappointing that the neural net doesn't manage to correctly predict 0 footfall - I imagine a Poisson or negative binomial loss function would really help here. 
+
+Here we do the same but on the test set.
 
 
 ```{r, eval=TRUE}
@@ -996,10 +995,12 @@ model <- prophet(prophet_train,
                  changepoint.prior.scale = 0.01)
 future_df <- make_future_dataframe(model, freq = 60,
                                    periods = 60*24)
-forecast <- predict(model, future_df) %>% as_tibble() %>% 
+forecast <- predict(model, future_df)
+forecast_subset <- forecast %>%
+  as_tibble() %>% 
   select(ds, yhat)
 
-train_and_prediction <- left_join(forecast, prophet_train, by = "ds")
+train_and_prediction <- left_join(forecast_subset, prophet_train, by = "ds")
 all_prophet_data <- left_join(train_and_prediction, prophet_test, by = "ds")
 all_prophet_data_long <- all_prophet_data %>% 
   gather(type, y, -ds)
@@ -1016,15 +1017,17 @@ ggplot(all_prophet_data_long %>% filter(type != "yhat"), aes(x = ds, y = y, colo
 ```{r}
 prophet_plot_components(model, forecast)
 
+
+
+
+```
+
+
+```{r, results = "hide"}
 df_cv <- cross_validation(model, horizon = 60, units = "mins")
-df_cv %>% head %>% kable
+
 ```
 
-
-
-```{r}
-df_p <- performance_metrics(df_cv)
-```
 
 
 ```{r}
