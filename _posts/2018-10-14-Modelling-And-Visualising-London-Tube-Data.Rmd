@@ -8,7 +8,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-In this post we're departing a little from replication of papers in economics and trying our hand at visualising networks followed by modelling passenger footfall across the London Underground during a week in November 2009. We'll very briefly explore two different methods to predict passenger footfall, an LTSM neural net identical to a recent Rstudio Keras blogpost and Facebook's Prophet forecasting library. We will be visualising model results without making explicit formal comparisons between the two. 
+In this post we're departing a little from the replication of papers in economics and trying our hand at visualising networks followed by modelling passenger footfall across the London Underground during a week in November 2009. We'll very briefly explore two different methods to predict passenger footfall, an LTSM neural net identical to a recent Rstudio Keras blog post and Facebook's Prophet forecasting library. We will be visualising model results without making explicit formal comparisons between the two. 
 
 ```{r, include = FALSE}
 library(plotly)
@@ -63,21 +63,20 @@ oyster <- read_csv('assets/Original Data/Nov09JnyExport.csv')
 oyster_underground <- oyster %>% 
   filter(SubSystem == "LUL") # LUL is the SubSystem code for Tube journeys
 rm(oyster)
-gc(verbose = FALSE)
 
 oyster_underground <- oyster_underground %>% 
   filter(StartStn != "Unstarted") %>% 
   filter(EndStation != "Unfinished") %>% 
   filter(!is.na(EntTimeHHMM)) %>% 
   filter(!is.na(EXTimeHHMM)) %>% 
-  select(-SubSystem)
+  select(-SubSystem, -FinalProduct)
 
 oyster_underground %>% 
   head() %>% 
   kable()
 ```
 
-Next we encode `daytype` as a factor with levels running from Monday to Sunday, we also add a weekday and weekend factor that will make histograms featuring aggregated data later easier to order. Finally, we convert the timestamp TFL use to a more accessible format using lubridate's `ymd_hms()` and create `journey_time` using lubridate's `interval()` function.
+Next we encode `daytype` as a factor with levels running from Monday to Sunday, we also add a weekday and weekend factor that will make histograms featuring aggregated data easier to order. Finally, we convert the timestamp TFL use to a more accessible format using lubridate's `ymd_hms()` and create `journey_time` using lubridate's `interval()` function.
 ```{r initial_cleaning, cache = TRUE}
 library(forcats)
 library(lubridate)
@@ -110,7 +109,6 @@ oyster_underground_lubridate <- oyster_underground %>%
 Plotly and GitHub Pages haven't been playing together nicely recently so we'll stick with ggplot2 for now. A binwidth of 600 seconds corresponds to ten minute intervals, `geom_histogram` creates a histogram corresponding to the density of time observations which is effectively a barchart of footfall against time for our purposes here.
 ```{r initial_histograms, fig.show='hold', fig.align="center", cache = TRUE}
 library(ggplot2)
-
 p <- ggplot(oyster_underground_lubridate,
             aes(x = EntTimeHHMM)) +
   geom_histogram(fill = "firebrick2", binwidth = 600, alpha = 0.2, color = "white") +
@@ -118,7 +116,6 @@ p <- ggplot(oyster_underground_lubridate,
   xlab("Tap In Time") +
   ggtitle("Tap In Time for London Tube Stations") 
 p
-
 q <- ggplot(oyster_underground_lubridate,
             aes(x = EXTimeHHMM)) +
   geom_histogram(fill = "springgreen2", binwidth = 600, colour = "white") +
@@ -126,9 +123,6 @@ q <- ggplot(oyster_underground_lubridate,
   ggtitle("Tap Out Time for London Tube Stations") +
   xlab("Tap Out Time")
 q
-
-
-
 ```
 
 
@@ -144,24 +138,19 @@ pq <- oyster_underground_lubridate %>%
   ggtitle("Tap In And Tap Out Time", subtitle = "London Tube Stations") +
   theme_minimal()
 pq
-
-
 ```
 
-Now we bin each time period into five minute intervals and plot mean journey time as a function of tap in time. Here we bin the intervals using two dplyr pipes and lubridate, alternatively we could have used the tibbletime library which we'll explore briefly later.
+Now, we bin each time period within a given day into five minute intervals and plot mean journey time as a function of tap in time. Here, we bin the intervals using two dplyr pipes and lubridate, alternatively we could have used the tibbletime library which we'll explore briefly later.
 
 ```{r journey_times, fig.align="center"}
 library(RColorBrewer)
-
 oyster_j_time <- oyster_underground_lubridate %>% 
   group_by(entry_time, daytype, downo) %>% 
   summarise(average_journey = mean(journey_time))
-
 oyster_j_time_5 <- oyster_j_time %>% 
   mutate(five_min = round_date(entry_time, unit = "5 min")) %>% 
   group_by(five_min, daytype, downo) %>% 
   summarise(average_journey_5 = mean(average_journey))
-  
 p <- oyster_j_time_5 %>% 
   ggplot(aes(x = five_min,
              y = average_journey_5,
@@ -174,7 +163,6 @@ p <- oyster_j_time_5 %>%
   ylim(0, 75) +
   labs(subtitle = "Lighter colours indicate days later in the week")
 p
-
 q <- oyster_j_time_5 %>% 
   ggplot(aes(x = five_min,
              y = average_journey_5,
@@ -186,22 +174,21 @@ q
 
 ```
 
-LOESS lines show a little clearer than the scatter plot that it seems like weekends have higher average journey times. This is a little counter-intuitive as at first glance we'd expect weekday journeys to be longer due to rush hour traffic. However, a simple explanation (classic confounder relationship) is that commuter preferences change when comparing weekdays and weekends - short commutes to work will have different mean journey times than sightseeing trips on the weekend for instance.
+LOESS lines show a little clearer that it seems like weekends have higher average journey times. This is a little counter-intuitive as at first glance we'd expect weekday journeys to be longer due to rush hour traffic. However, a simple explanation (and classic confounder relationship) is that commuter preferences are systematically different between weekdays and weekends - short commutes to work will have different mean journey times than sightseeing trips on the weekend for instance.
 
-To formally test for this^[Really and truly we should make adjustments to our standard errors here for heteroscedasticity and autocorrelation]:
+We can formally test for this using a weekend dummy and regressing average journey time on each five minute bin and the created dummy - we destroy a lot of information here by averaging journey time for each bin but this is just meant to be a quick and dirty check anyway:
 ```{r, results = "asis"}
 library(broom)
+library(sandwich)
+library(lmtest)
 oyster_j_time_5 <- oyster_j_time_5 %>% 
   mutate(weeknd = ifelse((daytype == "Sat") | (daytype == "Sun"), 1, 0))
-
 model <- lm(average_journey_5 ~ five_min + weeknd,
             data = oyster_j_time_5)
-results <- model %>% tidy()
-confints <- model %>% confint_tidy()
-estimates_intervals <- bind_cols(results, confints)
-
-estimates_intervals %>% kable(digits = 3)
+results <- coeftest(model, vcov = vcovHAC) %>% tidy()
+results %>% kable(digits = 3)
 ```
+
 
 
 ## Network Visualisations
@@ -219,7 +206,7 @@ stations_data <- oyster_underground_lubridate %>%
 
 Next, we create a series of the 15 largest station pairings by journey figures and select only the stations connecting to these "hub" stations. We use a random normal variable `x` to order our dataframe so that large stations aren't bunched together in our plots.
 
-Then we use tidygraph and ggraph to plot a circular network graph.
+Then, we use tidygraph and ggraph to plot a circular network graph.
 
 ```{r initial_graphs, fig.height=10, fig.width=10}
 library(tidygraph)
@@ -230,18 +217,11 @@ stations_filtered <- stations_data %>%
   select(StartStn, EndStation) %>% 
   gather(type, station) %>% 
   select(station)
-
-
-
-
 station_data_filtered <- stations_data %>% 
   mutate(x = rnorm(n())) %>% 
   arrange(x) %>% 
   filter((StartStn %in% stations_filtered$station) | (EndStation %in% stations_filtered$station)) %>% 
   filter(n > 250)
-
-
-
 oyster_graph <- as_tbl_graph(station_data_filtered, directed  = TRUE)
 ggraph(oyster_graph, layout = "linear", circular = TRUE) + 
     geom_edge_arc(aes(width = n, color = n, alpha = n,
@@ -258,17 +238,17 @@ ggraph(oyster_graph, layout = "linear", circular = TRUE) +
 ```
 
 
-Here we use a different type of network graph to display the directed relationship of the data, we use an extra large plot however it's still a little messy.
+Here, we use a different type of network graph to display the directed relationship of the data. We use an extra large plot however it's still a little messy.
 ```{r fan_graph, fig.height=10, fig.width=10}
-ggraph(oyster_graph) + 
+ggraph(oyster_graph, layout = "fr") + 
     geom_edge_fan(aes(width = n, color = n, alpha = n,
                       start_cap = label_rect(node1.name),
                        end_cap = label_rect(node2.name)),
-                  arrow = arrow(length = unit(2, 'mm'))) + 
-    guides(edge_width = 'none',
+                  arrow = arrow(length = unit(1.5, 'mm'))) + 
+    guides(edge_width = "none",
            edge_colour = "none",
            alpha = "none") +
-    geom_node_text(aes(label = name), size = 5, repel = FALSE, colour = "white") +
+    geom_node_text(aes(label = name), size = 3, repel = FALSE, colour = "white") +
     scale_edge_colour_distiller(palette = "Reds", direction = 1) +
     theme_graph(background = "grey20", text_colour = "white") +
   theme(legend.position = "none")
@@ -289,7 +269,7 @@ ggraph(ed) +
                       start_cap = label_rect(node1.name),
                        end_cap = label_rect(node2.name)),
                   arrow = arrow(length = unit(2, 'mm'))) + 
-    guides(edge_width = 'none',
+    guides(edge_width = "none",
            edge_colour = "none",
            alpha = "none") +
     geom_node_text(aes(label = name), size = 5, repel = TRUE, colour = "white") +
@@ -297,10 +277,8 @@ ggraph(ed) +
     theme_graph(background = "grey20", text_colour = "white") +
   theme(legend.position = "none") +
   facet_edges(~short_journey)
-
-
-
 ```
+[EDIT: I'm not sure what's up the large connection seemingly pointing to empty space in the South-West quadrant, it doesn't show up on Rstudio's viewer locally.]
 
 
 I'm not sure if this one is informative but it looks funky I guess.
@@ -328,7 +306,7 @@ ggraph(oyster_graph %>%
 
 
 
-```{r, eval = FALSE}
+```{r, eval = FALSE, echo = FALSE}
 switched_df <- stations_filtered %>% 
   unite(col = station_pair, EndStation, StartStn, remove = FALSE)
 switched_df
@@ -365,7 +343,7 @@ ggraph(oyster_journeys, layout = "fr") +
 
 In this section we'll explore how to predict Tube footfall using a number of different techniques, rather than drilling down on one particular method we'll briefly compare model performance.
 
-First however, some more visulations:
+First, however, some more visualisations:
 
 ```{r time_of_day_hist, fig.align="center"}
 library(magrittr)
@@ -444,8 +422,6 @@ oyster_dates <- oyster_knit %>%
 
 Next we aggregate observations by time and date using `group_by` followed by `as_tbl_time` to create a "time-aware" tibble. Once we've done this we find the earliest and latest datetime and create an empty time series of 0s which we combine with our Oyster data to generate observations for every time period, including those when not footfall was recorded. 
 
-
-
 ```{r}
 library(tibbletime)
 pooled_data <- oyster_dates %>% 
@@ -509,7 +485,6 @@ rolling_origin_resamples <- rolling_origin(pooled_weekday,
                                         
 )
 
-rolling_origin_resamples
 plot_split <- function(split,
                        expand_y_axis = TRUE,
                        alpha = 1,
@@ -829,16 +804,15 @@ history <- model %>% fit(
   epochs     = FLAGS$n_epochs,
   callbacks = callbacks
 )
-
+plot(history, metrics = "loss")
 ```
 
 
-Now we create loss plots and a comparison dataframe:
+Model fitting is pretty fast on my laptop but adding additional LTSM layers and cross-fold validation quickly became prohibitively time intensive. Initially I was pretty puzzled by the fact that training loss exceeded validation loss however a quick google suggests that this indicates that the training set is much harder to predict than our validation set - I think that the footfall 0s during closing hours are causing this rather than any coding/modelling errors on my part but I could be very wrong.
+
+This code block creates a wide dataset of rolling predictions from the training set which we'll use shortly to calculate the model's error as well as plot predictions:
 
 ```{r, fig.align="center"}
-plot(history, metrics = "loss")
-
-
 pred_train <- model %>%
   predict(X_train, batch_size = FLAGS$batch_size) %>%
   .[, , 1]
@@ -859,10 +833,7 @@ for (i in 1:nrow(pred_train)) {
 
 ```
 
-Googling suggests that if training loss is above validation loss it indicates that the training set is much harder to predict than our validation set - I think that the footfall 0s during closing hours are causing this rather than any coding/modelling errors on my part but I could be very wrong.
-
-
-Here we calculate the root mean squared error of the model using the training data - note the use of `quo` and `!!` necessary with the tidyverse's quasiquotation philosophy.
+Here, we calculate the root mean squared error of the model using the training data - note the use of `quo` and `!!` necessary with the tidyverse's quasiquotation philosophy.
 ```{r}
 coln <- colnames(compare_train)[4:ncol(compare_train)]
 cols <- map(coln, quo(sym(.)))
@@ -878,7 +849,7 @@ rsme_train <-
 rsme_train
 ```
 
-Here I depart from the RStudio blog post and transform the data into a long format which makes plotting significantly easier. I'm quite lazy here and use `separate` rather than `gsub` and regex to remove unwanted strings.
+I depart from the RStudio blog post substantially here and transform the data into a long format which makes plotting significantly easier. I'm quite lazy and use `separate` rather than `gsub` and regex to remove unwanted strings.
 
 ```{r, fig.align="center"}
 
@@ -908,7 +879,7 @@ p
 
 Visually it looks like the model does a pretty good job of predicting the next hour's footfall based off current footfall. It's a little disappointing that the neural net doesn't manage to correctly predict 0 footfall - I imagine a Poisson or negative binomial loss function would really help here. 
 
-Here we do the same but on the test set.
+Below we do the same as above but with the test data.
 
 
 ```{r, eval=TRUE}
@@ -946,7 +917,7 @@ rsme_test
 ```
 
 
-testing visuals
+Testing error doesn't look wildly different from training error on the subset of predictions we've selected to display:
 ```{r, eval = TRUE}
 
 compare_test_long <- compare_test %>%
@@ -975,9 +946,12 @@ p <- ggplot(compare_test_long_filtered,
 p
 ```
 
-
+So the LTSM model did a pretty good job of capturing some of the characteristics of tube footfall - the bimodal nature of footfall over time seemed to be modelled to some degree by the neural net and lower footfall during station closing hours could be seen in the model predictions.
 
 ## Prophet
+In this section we'll use Facebook's [Prophet library](https://facebook.github.io/prophet/) to model footfall. Prophet's design aim or philosophy is to make time series forecasting easy for small corporates and those less experienced with time series analysis and is built on top of [Stan](http://mc-stan.org/). Unfortunately, a tradeoff of Prophet's incredible ease of use is that we can't fiddle with all the nuts and bolts of Stan - for instance using a Poisson likelihood as mentioned earlier.
+
+
 ```{r}
 library(prophet)
 options(mc.cores = parallel::detectCores())
@@ -1013,21 +987,23 @@ ggplot(all_prophet_data_long %>% filter(type != "yhat"), aes(x = ds, y = y, colo
 
 ```
 
+Like the LTSM model Prophet does an okay job at capturing the twin rush hour peaks, although the LTSM model seems to get a better handle on the magnitude of these peaks. Again, the model struggles with 0 footfall, adding a dummy regressor for midnight/early morning hours would probably help here.
+
+Another feature of Prophet is that we can plot each trend component. The plot below clearly displays the rush hour trend as well as a slight increase in passenger numbers as we move from Monday to Friday:
 
 ```{r}
 prophet_plot_components(model, forecast)
 
-
-
-
 ```
 
+Prophet also has built in cross-validation features. We ape the neural net set-up by feeding in an initial training period of an hour in order to predict the next hour, however I __think__ Prophet uses a cumulative training set rather than discrete training splits which renders already fuzzy comparisons between the two models even more otiose.
 
 ```{r, results = "hide"}
-df_cv <- cross_validation(model, horizon = 60, units = "mins")
+df_cv <- cross_validation(model, horizon = 60, initial = 60, units = "mins")
 
 ```
 
+When we plot the cross-validated root mean squared error we find, unsurprisingly, that the model error increases as prediction horison increases:
 
 
 ```{r}
@@ -1035,3 +1011,8 @@ plot_cross_validation_metric(df_cv, metric = "rmse")
 ```
 
 
+## Conclusion
+
+We've briefly explored a few aspects of TFL's Tube data using `ggraph` and `tidygraph` network visulatisations as well as toying with Facebook's Prophet library and Keras. Clearly the models we've developed have a great deal of room for improvement - this was far more of a learning experience for me than previous posts - however, on the whole I think we managed to capture the idiosyncrasies of the data pretty well.
+
+My next post will probably return to Mankiw, Romer and Weil's empirics of growth paper using Bayesian hierarchical models to estimate Solow model parameters as an alternative to the separate regression framework we've been using so far.
