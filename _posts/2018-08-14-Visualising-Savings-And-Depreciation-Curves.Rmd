@@ -262,6 +262,7 @@ p
 
 The $\alpha$ estimates are pretty different to MRW's original results which is a little surprising considering the underlying regression estimates seemed to be quite similar when we plotted them in the last post. Furthermore, differentiating the $\alpha$ formula with respect to $x$, our regression estimates, gives us $\frac{1}{(1+x)^2}$ which suggests that $\alpha$ is less sensitive to any given change in $x$ than $x$ itself i.e. $$1 \geq\frac{1}{(1+x)^2} \quad \forall \space  x$$
  
+[Edit: This isn't true for $-2 < x < 0$ which invalidates the above somewhat.]
  This could be because the restricted regression set-up we're employing effectively compounds all the estimated coefficient differences into one parameter.
  
  Moving onto the Augmented model and the estimates begin to look similar to Mankiw, Romer and Weil's:
