@@ -1,0 +1,361 @@
+---
+output: 
+  html_document:
+    code_folding: show
+    highlight: kate
+    theme: paper
+editor_options:
+  chunk_output_type: console
+---
+
+```{r, includ = "FALSE"}
+library(knitr)
+opts_chunk$set(echo=TRUE,
+	             cache=TRUE,
+               prompt=FALSE,
+               tidy=FALSE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.align = "center")
+
+```
+
+
+XYZ
+
+```{r}
+library(readr)
+library(forcats)
+MRW_data <- read_csv('assets/Transformed Data/MRW_clean_new_dummies.csv')
+MRW_data$club <- as_factor(MRW_data$club)
+```
+
+
+ABC
+```{r}
+library(rstanarm)
+library(dplyr)
+library(broom)
+library(ggplot2)
+```
+
+
+```{r, eval = FALSE}
+
+options(mc.cores = parallel::detectCores())
+
+solow_formula <- log(`1985`) ~ log(s) + log(n_g_d)
+
+unrestricted_model <- stan_glm(formula = solow_formula,
+                               data = MRW_data %>% filter(club == "rich"))
+unrestricted_model %>% tidy()
+```
+
+
+
+```{r, eval = FALSE}
+varying_slope <- stan_glmer(formula = log(`1985`) ~  0 + (log(s) + log(n_g_d)) | club,
+                            data = MRW_data,
+                            adapt_delta = 0.999999)
+
+```
+
+
+```{r}
+load("MRW_HIER_DATA")
+```
+
+
+```{r}
+library(bayesplot)
+color_scheme_set("red")
+mcmc_areas(varying_slope %>% as.matrix(), regex_pars = "n_g_d")
+
+```
+
+
+```{r}
+prior_vs_post <- unrestricted_model %>% posterior_vs_prior()
+prior_vs_post +
+  theme_minimal()
+```
+
+
+```{r}
+mcmc_areas_ridges(varying_slope %>% as.matrix(), regex_pars = "n_g_d")
+
+dat <- varying_slope %>% 
+  as_tibble() %>% 
+  select(starts_with("b[log(n_g_d)"))
+
+dat_1 <- dat %>% 
+  select("b[log(n_g_d) club:rich]") %>% 
+  rename("n_g_d_RICH" = "b[log(n_g_d) club:rich]")
+
+ggplot(dat_1, aes(x = n_g_d_RICH)) +
+  geom_histogram()
+
+
+mcmc_hist(varying_slope %>% as.matrix(),
+          pars = "b[log(n_g_d) club:rich]")
+```
+
+
+
+
+```{r}
+library(tidybayes)
+tidy_df <- varying_slope %>% 
+  spread_draws(b[term, group])
+
+
+```
+
+```{r}
+library(tidybayes)
+library(ggridges)
+library(RColorBrewer)
+
+library(magrittr)
+library(dplyr)
+library(forcats)
+library(tidyr)
+library(purrr)
+library(modelr)
+library(tidybayes)
+library(ggplot2)
+library(ggstance)
+library(ggridges)
+library(rstan)
+library(rstanarm)
+library(cowplot)
+
+tidy_df <- varying_slope %>%
+  spread_draws(b[term,group]) %>% 
+  ungroup() %>% 
+  mutate(group = gsub(pattern = "club:", "", group))
+
+tidy_rich_n_g_d <- tidy_df %>% 
+  filter(term == "log(n_g_d)") %>% 
+  filter(group == "rich")
+
+ggplot(tidy_rich_n_g_d, aes(x = b)) +
+  geom_histogram()
+
+theme_set(theme_tidybayes() + panel_border() + background_grid())
+p_dat <- tidy_df %>% 
+  filter(term == "log(n_g_d)") %>% 
+  ggplot(aes(x = b, fill = group, y = group)) +
+  geom_density_ridges(quantile_lines = TRUE, quantiles = 2,
+                      alpha = 0.3)  +
+  guides(fill = "none") +
+  geom_vline(aes(xintercept = 0), linetype = "longdash", alpha = 0.3) +
+  ylab("Country Group") +
+  xlab("Posterior Densities, log(n_g_d)") +
+  theme_ridges()
+p_dat
+
+p_dat_1 <- tidy_df %>% 
+  filter(term == "log(n_g_d)") %>% 
+  ggplot(aes(x = b,
+             y = group,
+             fill = factor(..quantile..)))  +
+  stat_density_ridges(geom = "density_ridges_gradient",
+                      calc_ecdf = TRUE,
+                      quantiles = c(0.05,
+                                    0.95)) +
+  scale_fill_manual(name = "Probability",
+                    values = c("#FF0000A0", "#A0A0A0A0", "#FF0000A0")) +
+  geom_vline(aes(xintercept = 0), linetype = "longdash", alpha = 0.3) +
+  theme_ridges() +
+  ylab("Country Group") +
+  xlab("Posterior Densities, log(n_g_d)") +
+  guides(fill = "none") +
+  labs(caption = "90% certainty intervals highlighted")
+  
+p_dat_1
+
+
+
+
+
+
+
+```
+
+
+Savings
+```{r}
+
+tidy_df %>% filter(term == "log(s)") %>% 
+  ggplot(aes(x = b,
+             y = group,
+             fill = factor(..quantile..))) +
+  stat_density_ridges(geom = "density_ridges_gradient",
+                      calc_ecdf = TRUE,
+                      quantiles = c(0.05,
+                                    0.95)) +
+    scale_fill_manual(name = "Probability",
+                    values = c("#FF0000A0", "#A0A0A0A0", "#FF0000A0")) +
+  geom_vline(aes(xintercept = 0), linetype = "longdash", alpha = 0.3) +
+  theme_ridges() +
+  ylab("Country Group") +
+  xlab("Posterior Densities, log(s)") +
+  guides(fill = "none") +
+  labs(caption = "90% certainty intervals highlighted")
+
+```
+
+What's going on?
+```{r}
+
+tidy_df %>% 
+  filter(term == "log(n_g_d)") %>% 
+  ggplot(aes(x = b,
+             y = group,
+             fill = group)) +
+  geom_density_ridges(
+    jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.8,
+    vline_size = 2, vline_color = "red",
+    point_size = 0.4, point_alpha = 0.1,
+    position = position_raincloud(adjust_vlines = TRUE)
+  ) +
+  theme_ridges() +
+  guides(fill = "none") +
+  xlab("Posterior Densities, log(n_g_d)") +
+  ylab("Country Group") +
+  labs(caption = "Median and IQR depicted by red lines") +
+  geom_vline(aes(xintercept = 0), linetype = "longdash", alpha = 0.3)
+```
+
+
+```{r}
+tidy_df %>% 
+  filter(term == "log(s)") %>% 
+  ggplot(aes(x = b,
+             y = group,
+             fill = group)) +
+  geom_density_ridges(
+    jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.8,
+    vline_size = 2, vline_color = "red",
+    point_size = 0.4, point_alpha = 0.1,
+    position = position_raincloud(adjust_vlines = TRUE)
+  ) +
+  theme_ridges() +
+  guides(fill = "none") +
+  xlab("Posterior Densities, log(s)") +
+  ylab("Country Group") +
+  labs(caption = "Median and IQR depicted by red lines") +
+  geom_vline(aes(xintercept = 0), linetype = "longdash", alpha = 0.3)
+```
+
+
+
+## Compare to Frequentist regression
+
+
+## Posterior Predictive Checks
+
+## Prior Sensitivity
+
+
+## Fitted Values Plots
+
+
+
+
+```{r}
+m_mpg = stan_glm(mpg ~ hp * cyl, data = mtcars)
+
+##
+mtcars %>%
+  group_by(cyl) %>%
+  data_grid(hp = seq_range(hp, n = 51)) %>%
+  add_fitted_draws(m_mpg) %>%
+  ggplot(aes(x = hp, y = mpg, color = ordered(cyl))) +
+  stat_lineribbon(aes(y = .value)) +
+  geom_point(data = mtcars) +
+  scale_fill_brewer(palette = "Greys") +
+  scale_color_brewer(palette = "Set2")
+##
+
+##
+
+mtcars %>%
+  group_by(cyl) %>%
+  data_grid(hp = seq_range(hp, n = 101)) %>%
+  add_fitted_draws(m_mpg, n = 100) %>%
+  ggplot(aes(x = hp, y = mpg, color = ordered(cyl))) +
+  geom_line(aes(y = .value, group = paste(cyl, .draw)), alpha = .1) +
+  geom_point(data = mtcars) +
+  scale_color_brewer(palette = "Dark2")
+##
+```
+
+
+
+```{r}
+##TODO: Clean up, partial out, write up
+
+library(crosstalk)
+library(plotly)
+test_dat <- MRW_data %>% 
+  group_by(club) %>% 
+  data_grid(s = mean(s), n_g_d = seq_range(n_g_d, 10)) %>% 
+  add_fitted_draws(varying_slope, n = 100)
+
+test_dat_shared <- SharedData$new(test_dat, ~club, group = "Choose Subset:")
+MRW_data_shared <- SharedData$new(MRW_data, ~club, group = "Choose Subset:")
+
+p <- test_dat_shared %>% 
+  ggplot(aes(x = log(n_g_d),
+             y = log(`1985`),
+             colour = club,
+             text = country)) +
+    geom_line(aes(y = .value,
+                  group = paste(club, .draw),
+                  text = NULL), alpha = 0.1) +
+    scale_color_brewer(palette = "Dark2") +
+  geom_point(data = MRW_data_shared) +
+  theme_minimal()
+p
+q <- p %>% 
+  ggplotly(tooltip = "text") %>% 
+  highlight(on = "plotly_click",
+            persistent = TRUE,
+            selectize = TRUE,
+            defaultValues = c("intermediate_no_oil"),
+            opacity = 0.1) %>% 
+  layout(showlegend= FALSE)
+q
+  
+    
+test_dat  
+
+
+
+## Prediction bands
+
+MRW_data %>% 
+  group_by(club) %>% 
+  data_grid(s = mean(s),
+            n_g_d = seq_range(n_g_d, 10)) %>%
+  add_predicted_draws(varying_slope) %>% 
+  ggplot(aes(x = log(n_g_d),
+             y = log(`1985`),
+             colour = club)) +
+  stat_lineribbon(aes(y = .prediction),
+                      .width = c(0.95, 0.8, 0.5),
+                      alpha = 0.25) +
+  geom_point(data = MRW_data) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_color_brewer(palette = "Dark2") +
+  theme_minimal()
+
+```
+
+
+
+
+
