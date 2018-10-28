@@ -8,7 +8,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-```{r, includ = "FALSE"}
+```{r, include = FALSE}
 library(knitr)
 opts_chunk$set(echo=TRUE,
 	             cache=TRUE,
@@ -55,9 +55,9 @@ unrestricted_model %>% tidy()
 
 
 ```{r, eval = FALSE}
-varying_slope <- stan_glmer(formula = log(`1985`) ~  0 + (log(s) + log(n_g_d)) | club,
+varying_slope <- stan_glmer(formula = log(`1985`) ~ 0 + log(s) + log(n_g_d) | club,
                             data = MRW_data,
-                            adapt_delta = 0.999999)
+                            adapt_delta = 0.999)
 
 ```
 
@@ -357,5 +357,134 @@ MRW_data %>%
 
 
 
+## FWL?
 
+```{r}
+library(broom)
+library(dplyr)
+
+ed <- varying_slope %>% coef()
+ed
+```
+
+
+```{r}
+FWL_1 <- stan_glmer(log(`1985`) ~ log(n_g_d) | club,
+                    data = MRW_data,
+                    adapt_delta = 0.99)
+FWL_2 <- stan_glmer(log(s) ~ log(n_g_d) | club,
+                    data = MRW_data,
+                    adapt_delta = 0.999)
+
+resid_1 <- FWL_1 %>% 
+  augment() %>% 
+  as_tibble() %>% 
+  select(.resid) %>% 
+  rename(y_squiggle = .resid)
+resid_2 <- FWL_2 %>% 
+  augment() %>% 
+  as_tibble() %>% 
+  select(.resid,
+         club) %>% 
+  rename(x_squiggle = .resid)
+squiggle_df <- bind_cols(resid_1,
+                         resid_2)
+
+FWL_final <- stan_glmer(y_squiggle ~ 0 + x_squiggle | club,
+                        data = squiggle_df,
+                        adapt_delta = 0.99)
+
+
+FWL_coef <- FWL_final %>% coef()
+
+ed
+FWL_coef
+```
+
+
+
+```{r}
+FWL_f_1 <- lm(log(`1985`) ~ log(n_g_d),
+              data = MRW_data %>% 
+                filter(club == "rich")) %>% 
+  resid() %>% 
+  as_tibble() %>% 
+  rename(y_s = value)
+FWL_f_2 <- lm(log(s) ~ log(n_g_d),
+              data = MRW_data %>% 
+                filter(club == "rich")) %>% 
+  resid() %>% 
+  as_tibble() %>% 
+  rename(x_s = value)
+
+s_df <- bind_cols(FWL_f_1,
+                  FWL_f_2)
+
+
+FWL_final <- lm(y_s ~ 0 + x_s,
+                data = s_df)
+
+full <- lm(log(`1985`) ~ log(s) + log(n_g_d),
+           data = MRW_data %>% 
+             filter(club == "rich"))
+full %>% 
+  coef()
+FWL_final %>% 
+  coef()
+
+
+
+```
+
+
+Partialling 
+```{r}
+
+library(purrr)
+clubs <- c("rich",
+           "oil",
+           "intermediate_no_oil",
+           "developing_no_oil")
+
+MRW_full <- MRW_data %>% 
+  select(`1985`,
+         s,
+         n_g_d,
+         club,
+         country) %>% 
+  na.omit()
+
+My <- clubs %>% 
+  map(~filter(MRW_full, club == .)) %>% 
+  map_df(~lm(log(`1985`) ~ log(n_g_d),
+          data = .) %>% 
+        resid() %>% 
+        as_tibble() %>% 
+        rename(y_s = value)) 
+Mx <- clubs %>% 
+    map(~filter(MRW_full, club == .)) %>% 
+  map_df(~lm(log(s) ~ log(n_g_d),
+          data = .) %>% 
+        resid() %>% 
+          as_tibble() %>% 
+          rename(x_s = value))
+
+M_df <- bind_cols(MRW_full,
+                  My,
+                  Mx)
+
+FWL <- clubs %>% 
+  map(~filter(M_df,
+              club == .)) %>% 
+  map(~lm(y_s ~ 0 + x_s,
+          data = .) %>% coef)
+
+
+long <- clubs %>% 
+  map(~filter(MRW_full, club == .)) %>% 
+  map(~lm(log(`1985`) ~ log(n_g_d) + log(s),
+          data = .) %>% tidy %>% filter(term == "log(s)") %>% select(estimate))
+FWL %>% unlist()
+long %>% unlist()
+```
 
