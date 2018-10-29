@@ -670,5 +670,11 @@ lm_rich <- fwl_df %>%
   filter(club == "rich") %>% 
   lm(y_s ~ 0 + x_s, data = .)
 
+lm_oil <- fwl_df %>% 
+  filter(club == "oil") %>% 
+  lm(y_s ~ 0 + x_s,
+     data = .)
+lm_oil %>% coef()
+lm_rich %>% coef()
 ```
 
