@@ -404,6 +404,9 @@ FWL_coef
 
 
 ```{r}
+
+
+## rich
 FWL_f_1 <- lm(log(`1985`) ~ log(n_g_d),
               data = MRW_data %>% 
                 filter(club == "rich")) %>% 
@@ -432,6 +435,95 @@ full %>%
 FWL_final %>% 
   coef()
 
+## oil
+FWL_f_1_oil <- lm(log(`1985`) ~ log(n_g_d),
+              data = MRW_data %>% 
+                filter(club == "oil")) %>% 
+  resid() %>% 
+  as_tibble() %>% 
+  rename(y_s = value)
+FWL_f_2_oil <- lm(log(s) ~ log(n_g_d),
+              data = MRW_data %>% 
+                filter(club == "oil")) %>% 
+  resid() %>% 
+  as_tibble() %>% 
+  rename(x_s = value)
+
+s_df <- bind_cols(FWL_f_1_oil,
+                  FWL_f_2_oil)
+
+
+FWL_final_oil <- lm(y_s ~ 0 + x_s,
+                data = s_df)
+
+full_oil <- lm(log(`1985`) ~ log(s) + log(n_g_d),
+           data = MRW_data %>% 
+             filter(club == "oil"))
+full_oil %>% 
+  coef()
+FWL_final_oil %>% 
+  coef()
+
+## intermediate_no_oil
+FWL_f_1_int <- lm(log(`1985`) ~ log(n_g_d),
+              data = MRW_data %>% 
+                filter(club == "intermediate_no_oil")) %>% 
+  resid() %>% 
+  as_tibble() %>% 
+  rename(y_s = value)
+FWL_f_2_int <- lm(log(s) ~ log(n_g_d),
+              data = MRW_data %>% 
+                filter(club == "intermediate_no_oil")) %>% 
+  resid() %>% 
+  as_tibble() %>% 
+  rename(x_s = value)
+
+s_df <- bind_cols(FWL_f_1_int,
+                  FWL_f_2_int)
+
+
+FWL_final_int <- lm(y_s ~ 0 + x_s,
+                data = s_df)
+
+full_int <- lm(log(`1985`) ~ log(s) + log(n_g_d),
+           data = MRW_data %>% 
+             filter(club == "intermediate_no_oil"))
+full_int %>% 
+  coef()
+FWL_final_int %>% 
+  coef()
+
+## debeloping_no_oil
+
+FWL_f_1_dev <- lm(log(`1985`) ~ log(n_g_d),
+              data = MRW_data %>% 
+                filter(club == "developing_no_oil")) %>% 
+  resid() %>% 
+  as_tibble() %>% 
+  rename(y_s = value)
+FWL_f_2_dev <- lm(log(s) ~ log(n_g_d),
+              data = MRW_data %>% 
+                filter(club == "developing_no_oil")) %>% 
+  resid() %>% 
+  as_tibble() %>% 
+  rename(x_s = value)
+
+s_df <- bind_cols(FWL_f_1_dev,
+                  FWL_f_2_dev)
+
+
+FWL_final_dev <- lm(y_s ~ 0 + x_s,
+                data = s_df)
+
+full_dev <- lm(log(`1985`) ~ log(s) + log(n_g_d),
+           data = MRW_data %>% 
+             filter(club == "developing_no_oil"))
+full_dev %>% 
+  coef()
+FWL_final_dev %>% 
+  coef()
+
+
 
 
 ```
@@ -454,20 +546,28 @@ MRW_full <- MRW_data %>%
          country) %>% 
   na.omit()
 
+  augment() %>% 
+  as_tibble() %>% 
+  select(.resid,
+         club) %>% 
+  rename(x_squiggle = .resid)
+
 My <- clubs %>% 
   map(~filter(MRW_full, club == .)) %>% 
   map_df(~lm(log(`1985`) ~ log(n_g_d),
           data = .) %>% 
-        resid() %>% 
+        augment %>% 
         as_tibble() %>% 
-        rename(y_s = value)) 
+        select(.resid) %>% 
+        rename(y_s = .resid)) 
 Mx <- clubs %>% 
     map(~filter(MRW_full, club == .)) %>% 
   map_df(~lm(log(s) ~ log(n_g_d),
           data = .) %>% 
-        resid() %>% 
-          as_tibble() %>% 
-          rename(x_s = value))
+        augment %>% 
+        as_tibble() %>% 
+        select(.resid) %>% 
+          rename(x_s = .resid))
 
 M_df <- bind_cols(MRW_full,
                   My,
@@ -486,5 +586,89 @@ long <- clubs %>%
           data = .) %>% tidy %>% filter(term == "log(s)") %>% select(estimate))
 FWL %>% unlist()
 long %>% unlist()
+```
+
+
+```{r}
+
+test_resid_y <- bind_rows(FWL_f_1,
+                          FWL_f_1_oil,
+                          FWL_f_1_int,
+                          FWL_f_1_dev)
+
+test_x_resid <- bind_rows(FWL_f_2,
+                          FWL_f_2_oil,
+                          FWL_f_2_int,
+                          FWL_f_2_dev)
+check_y_resid <- test_resid_y - My
+check_y_resid %>% summary()
+
+check_x_resid <- test_x_resid - Mx
+check_x_resid %>% summary()
+
+
+rich_coef <- M_df %>% 
+  filter(club == "rich") %>% 
+  lm(y_s ~ 0 + x_s, data = .)
+rich_coef
+```
+
+
+```{r}
+library(modelr)
+dat <- clubs %>% 
+  map_df(~filter(MRW_data, club == .) %>% 
+        lm(log(`1985`) ~ log(n_g_d),
+           data = .) %>% 
+        add_residuals(data = MRW_data, model = ., var = "y_s"))
+
+dat_fwl <- clubs %>% 
+  map_df(~filter(MRW_data, club == .) %>% 
+        lm(log(s) ~ log(n_g_d),
+           data = .) %>% 
+        add_residuals(data = dat, model = ., var = "x_s"))
+
+rich <- dat_fwl %>% 
+  filter(club == "rich") %>% 
+  lm(y_s ~ 0 + x_s, data = .)
+rich
+
+
+```
+
+
+```{r}
+separate_data <- clubs %>% 
+  map(~filter(MRW_data, club == .))
+
+y_s <-  map2_df(.x = separate_data,
+       .y = clubs,
+       .f= function(x, y){lm(log(`1985`) ~ log(n_g_d),
+          data = x) %>% 
+        add_residuals(x, model = .) %>% 
+        as_tibble() %>% 
+        mutate(club = y) %>% 
+        select(resid,
+               club,
+               country) %>% 
+        rename(y_s = resid)})
+
+x_s <- map2_df(.x = separate_data,
+            .y = clubs,
+            .f = function(x, y){lm(log(s) ~ log(n_g_d),
+          data = x) %>% 
+        add_residuals(x, model = .) %>% 
+        as_tibble() %>% 
+        mutate(club = y) %>% 
+              select(resid,
+                     country) %>% 
+                rename(x_s = resid)
+              })
+fwl_df <- inner_join(y_s, x_s, by = "country")
+
+lm_rich <- fwl_df %>% 
+  filter(club == "rich") %>% 
+  lm(y_s ~ 0 + x_s, data = .)
+
 ```
 
