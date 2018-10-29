@@ -637,6 +637,8 @@ rich
 ```
 
 
+
+Partitioned Data
 ```{r}
 separate_data <- clubs %>% 
   map(~filter(MRW_data, club == .))
@@ -676,5 +678,90 @@ lm_oil <- fwl_df %>%
      data = .)
 lm_oil %>% coef()
 lm_rich %>% coef()
+```
+
+
+```{r}
+FWL_stan <- stan_glmer(y_s ~ 0 + x_s | club,
+                       data = fwl_df,
+                       adapt_delta = 0.99)
+FWL_stan %>% coef()
+varying_slope %>% coef()
+```
+
+
+
+```{r}
+##
+
+library(crosstalk)
+library(plotly)
+test_dat <- MRW_data %>% 
+  group_by(club) %>% 
+  data_grid(s = mean(s), n_g_d = seq_range(n_g_d, 10)) %>% 
+  add_fitted_draws(varying_slope, n = 100)
+
+test_dat_shared <- SharedData$new(test_dat, ~club, group = "Choose Subset:")
+MRW_data_shared <- SharedData$new(MRW_data, ~club, group = "Choose Subset:")
+
+p <- test_dat_shared %>% 
+  ggplot(aes(x = log(n_g_d),
+             y = log(`1985`),
+             colour = club,
+             text = country)) +
+    geom_line(aes(y = .value,
+                  group = paste(club, .draw),
+                  text = NULL), alpha = 0.1) +
+    scale_color_brewer(palette = "Dark2") +
+  geom_point(data = MRW_data_shared) +
+  theme_minimal()
+p
+q <- p %>% 
+  ggplotly(tooltip = "text") %>% 
+  highlight(on = "plotly_click",
+            persistent = TRUE,
+            selectize = TRUE,
+            defaultValues = c("intermediate_no_oil"),
+            opacity = 0.1) %>% 
+  layout(showlegend= FALSE)
+q
+  
+    
+##
+fwl_plot_dat <- fwl_df %>% 
+  group_by(club) %>% 
+  data_grid(x_s = seq_range(x_s, 10)) %>% 
+  add_fitted_draws(FWL_stan, n = 1000)
+
+fwl_shared <- SharedData$new(fwl_plot_dat, ~club, group = "Choose Subset:")
+fwl_orig_shared <- SharedData$new(fwl_df, ~club, group = "Choose a Subset:")
+
+# fwl_df_draws <- FWL_stan %>%
+#   spread_draws(b[term,group]) %>% 
+#   ungroup() %>% 
+#   mutate(group = gsub(pattern = "club:", "", group))
+
+p <- fwl_shared %>% 
+  ggplot(aes(x = x_s,
+             y = y_s,
+             colour = club,
+             text = country)) +
+    geom_line(aes(y = .value,
+                  group = paste(club, .draw),
+                  text = NULL), alpha = 0.1) +
+    scale_color_brewer(palette = "Dark2") +
+  geom_point(data = fwl_orig_shared) +
+  theme_minimal()
+p
+q <- p %>% 
+  ggplotly(tooltip = "text") %>% 
+  highlight(on = "plotly_click",
+            persistent = TRUE,
+            selectize = TRUE,
+            defaultValues = c("intermediate_no_oil"),
+            opacity = 0.1) %>% 
+  layout(showlegend= FALSE)
+q
+  
 ```
 
