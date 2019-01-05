@@ -1,0 +1,101 @@
+---
+title: "Metamer"
+author: "Ed Jee"
+date: "5 January 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+```{r}
+library(metamer)
+library(ggplot2)
+library(dplyr)
+MRW_clean <- readr::read_csv('assets/Transformed Data/MRW_clean_new_dummies.csv') 
+MRW_clean %>% 
+  ggplot(aes(x = s, y = log(`1985`), colour = club)) +
+  geom_point()
+```
+
+
+
+```{r}
+mean_cor <- delayed_with(mean(ln_gdp), mean(s), cor(ln_gdp, s))
+gdp_s_metamers <- metamerize(GDP_s %>% 
+                               select(-club), preserve = mean_cor, N = 20000)
+ggplot(gdp_s_metamers[[length(gdp_s_metamers)]], aes(s, ln_gdp)) +
+  geom_point(data = GDP_s, color = "red", size = 3, alpha = 0.2) +
+  geom_point()
+```
+
+
+```{r}
+library(purrr)
+create_metamer_data <- function(dataset, variable_1, variable_2, N = 20000){
+  variable_1 <- enquo(variable_1)
+  variable_2 <- enquo(variable_2)
+  
+  clean_data <- dataset %>% 
+    select(x = !!variable_1, y = !!variable_2) %>% 
+    na.omit()
+  mean_cor <- delayed_with(mean(x), mean(y), cor(x, y))
+  metamers <- metamerize(clean_data, preserve = mean_cor, N = N)
+  metamers <- metamers %>% 
+    map(. %>% rename(!!variable_1 := x, !!variable_2 := y))
+  return(metamers)
+}
+
+s_n_g_d <- MRW_clean %>% 
+  create_metamer_data(dataset = ., s, n_g_d, N = 20000)
+
+
+ggplot(s_n_g_d[[length(s_n_g_d)]], aes(x = s, y = n_g_d)) +
+  geom_point(data = MRW_clean, color = "red", alpha = 0.2, size = 5) +
+  geom_point()
+
+```
+
+```{r}
+ln_MRW_clean <- MRW_clean%>% 
+  mutate(ln_1960 = log(`1960`),
+         ln_1985 = log(`1985`))
+ln_gdp_metamer <- ln_MRW_clean %>% 
+  create_metamer_data(dataset = ., variable_1 = ln_1960, variable_2 = ln_1985, N = 500)
+
+ggplot(gdp_metamer[[length(gdp_metamer)]], aes(x = ln_1960, y = ln_1985)) +
+  geom_point(data = ln_MRW_clean, color = "red", size = 3, alpha = 0.2) +
+  geom_point()
+```
+
+```{r}
+library(gganimate)
+metamers_gdp_trimmed <- trim(gdp_metamer, 30*2)
+
+```
+
+
+
+```{r}
+gif_df <-  metamers_gdp_trimmed %>% 
+  imap_dfr(~(as_data_frame(.) %>% mutate(frame = .y)))
+gif_plot <- gif_df %>% 
+  ggplot(aes(ln_1960, ln_1985)) +
+  geom_point(data = ln_MRW_clean, color = "red", alpha = 0.2, size = 3) +
+  geom_point() +
+  transition_time(frame) +
+  ease_aes('linear') +
+  theme_minimal() +
+  labs(title = "Log GDP in 1985 and 1960 - A Metamer",
+       caption = "Each frame shows a different draw of the data with the same mean GDP and correlation between the two")
+gif_plot
+```
+
+
+## Regression Coefficients
+
+
