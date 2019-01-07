@@ -1,0 +1,334 @@
+---
+output: 
+  html_document:
+    code_folding: show
+    highlight: kate
+    theme: paper
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      fig.align = "center")
+```
+
+This post is inspired by a recent blogpost by [Elio Campitelli](https://eliocamp.github.io/codigo-r/en/2019/01/statistical-metamerism/) exploring "metamers" - Elio describes a metamer as a data generating process that creates identical summary statistics to a dataset of interest. The algorithmn Elio's package uses is drawn from [this paper](https://doi.org/10.1145/3025453.3025912). The classic case, also discussed by Elio, is Anscombe's Quartet (image from Wikipedia):
+![Taken from Wikipedia](Anscombe.png)
+
+
+We're going to do the same thing but with MRW's dataset (we're six posts into MRW now and still no sign of running out of steam). In a totally non-rigorous sort of way I think we can use this as a rough heuristic for how robust our results are - If we can't find any similar datapoints that give us the same statistics we could argue this is strong evidence that our results aren't particularly robust to even minor perturbations. 
+
+Along the way we'll create some interesting gifs and a great demonstration of omitted variables bias in action - the code and exposition is a little less slick than usual as I'm currently mid-exams.
+
+
+# Summary Stats
+
+First up, the relationship between GDP and savings rate - here's the original just as a reminder:
+```{r}
+library(metamer)
+library(ggplot2)
+library(dplyr)
+theme_set(theme_minimal())
+MRW_clean <- readr::read_csv('assets/Transformed Data/MRW_clean_new_dummies.csv') %>% 
+  mutate(s = log(s),
+         n = log(n_g_d))
+MRW_clean %>% 
+  ggplot(aes(x = s, y = log(`1985`), colour = club)) +
+  geom_point() +
+  labs(title = "GDP vs Saving Rate")
+```
+
+
+Here we create a function to do all the hard work for us - we're essentially putting Elio's example code in a function call, the `map` at the end of the function is just to fix up variable names as the NSE was giving me some headaches inside `delayed_with()`:
+
+```{r}
+library(purrr)
+create_metamer_data <- function(dataset, variable_1, variable_2, N = 20000, perturbation = 0.08){
+  variable_1 <- enquo(variable_1)
+  variable_2 <- enquo(variable_2)
+  
+  clean_data <- dataset %>% 
+    select(x = !!variable_1, y = !!variable_2) %>% 
+    na.omit()
+  mean_cor <- delayed_with(mean(x), mean(y), cor(x, y))
+  metamers <- metamerize(clean_data, preserve = mean_cor, N = N, perturbation = perturbation)
+  metamers <- metamers %>% 
+    map(. %>% rename(!!variable_1 := x, !!variable_2 := y))
+  return(metamers)
+}
+
+s_n_g_d <- MRW_clean %>% 
+  create_metamer_data(dataset = ., s, n_g_d, N = 20000, perturbation = 0.001)
+
+s_n_g_d_draw = s_n_g_d[[50]]
+
+ggplot(MRW_clean, aes(x = s, y = n_g_d)) +
+  geom_point(colour = "red", alpha = 0.2, size = 3) +
+  geom_point(data = s_n_g_d_draw) +
+  labs("A Metamer of Savings and Depreciation") +
+  theme_minimal()
+```
+Original datapoints are in red and simulated metamers in black, we can check that the two have the same summary stats (we specified that both variable means must be identical and correlation identical):
+```{r}
+library(tidyr)
+metamer_summs <- s_n_g_d_draw %>% 
+  summarise(mean_s = mean(s),
+            mean_n_g_d = mean(n_g_d),
+            corr = cor(s, n_g_d),
+            model = "metamer")
+
+
+orig_summs <- MRW_clean %>% 
+  summarise(mean_s = mean(s),
+            mean_n_g_d = mean(n_g_d, na.rm = TRUE),
+            corr = cor(s, n_g_d, use = "complete.obs"),
+            model = "original")
+bind_rows(orig_summs,
+          metamer_summs) %>% gather(val, var, -model) %>% spread(model, var) %>% mutate(diff = original - metamer)
+```
+At a first glance the difference between the original dataset and the metamer are pretty small.
+
+
+How about GDP in 1985 and GDP in 1960? 
+```{r}
+ln_MRW_clean <- MRW_clean %>% 
+  mutate(ln_1960 = log(`1960`),
+         ln_1985 = log(`1985`))
+ln_gdp_metamer <- ln_MRW_clean %>% 
+  create_metamer_data(dataset = ., variable_1 = ln_1960, variable_2 = ln_1985, N = 500)
+
+ggplot(ln_gdp_metamer[[length(ln_gdp_metamer)]], aes(x = ln_1960, y = ln_1985)) +
+  geom_point(data = ln_MRW_clean, color = "red", size = 3, alpha = 0.2) +
+  geom_point() +
+  labs(title = "Can we find another arrangement of GDP?") +
+  theme_minimal()
+```
+
+GDP in 1960 and 1985 can certainly be metamerised it seems.
+
+What do 500 metamer draws look like? Inspired by Elio's blog we create a gif below:
+```{r}
+library(gganimate)
+# metamers_gdp_trimmed <- trim(ln_gdp_metamer, 30*2)
+gif_df <-  ln_gdp_metamer %>% 
+  imap_dfr(~(as_data_frame(.) %>% mutate(frame = .y)))
+gif_plot <- gif_df %>% 
+  ggplot(aes(ln_1960, ln_1985)) +
+  geom_point(data = ln_MRW_clean, color = "red", alpha = 0.2, size = 3) +
+  geom_point() +
+  transition_time(frame) +
+  ease_aes('linear') +
+  theme_minimal() +
+  labs(title = "Log GDP in 1985 and 1960 - A Metamer",
+       caption = "Each frame shows a different draw of the data with the same mean GDP and correlation between the two.")
+gif_plot
+```
+
+
+
+# Regression Coefficients
+
+For a simple bivariate regression this is pretty easy - we just need to fix the covariance between $x$ and $y$ and the variance of $x$ to ensure that $\hat{\beta}$ doesn't change:
+```{r}
+bivariate_regression_metamer <- function(dataset, variable_1, variable_2, N = 20000){
+    variable_1 <- enquo(variable_1)
+  variable_2 <- enquo(variable_2)
+  
+  clean_data <- dataset %>% 
+    select(x = !!variable_1, y = !!variable_2) %>% 
+    na.omit()
+  mean_cor <- delayed_with(var(x), cov(y, x))
+  metamers <- metamerize(clean_data, preserve = mean_cor, N = N)
+  metamers <- metamers %>% 
+    map(. %>% rename(!!variable_1 := x, !!variable_2 := y))
+  return(metamers)
+}
+
+GDP_reg_metamer <- ln_MRW_clean %>% 
+  bivariate_regression_metamer(dataset = ., variable_1 = ln_1960, variable_2 = ln_1985, N = 500)
+
+gif_df <-  GDP_reg_metamer %>% 
+  imap_dfr(~(as_data_frame(.) %>% mutate(frame = .y)))
+```
+
+Creating regression estimates with `do` and `map`:
+```{r}
+library(broom)
+coef_estimate <- gif_df %>% 
+  group_by(frame) %>% 
+  do(model = lm(ln_1985 ~ 0 + ln_1960, data = .)) %>% 
+  tidy(model) %>% 
+  filter(term == "ln_1960")
+head(coef_estimate)
+```
+
+I think this looks pretty cool - there are slight perturbations in the slope but on the whole it remains unchanged:
+```{r}
+gif_beta_df <- left_join(gif_df, coef_estimate, by = "frame")
+
+gif_plot <- gif_beta_df %>% 
+  ggplot(aes(ln_1960, ln_1985)) +
+  geom_point(data = ln_MRW_clean, color = "red", alpha = 0.2, size = 3) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE) +
+  transition_time(frame) +
+  ease_aes('linear') +
+  theme_minimal() +
+  labs(title = "Log GDP in 1985 and 1960 - A Metamer",
+       caption = "Each frame shows a different draw of the data with the same regression slope.")
+gif_plot
+```
+
+
+We can see how the T-stat changes as we perturb the data ever further from the original:
+```{r}
+p <- gif_beta_df %>% 
+  ggplot(aes(x = frame, y = statistic)) +
+  geom_line(linewidth = 2) +
+  geom_point(size = 2) +
+  transition_reveal(frame) +
+  ease_aes("linear") +
+  theme_minimal() +
+  labs(title = "T Test Statistic by Draw")
+
+## This snippet combines the plots and is taken from:
+## https://github.com/thomasp85/gganimate/wiki/Animation-Composition
+library(magick)
+a_gif <- animate(gif_plot, width = 480, height = 480)
+b_gif <- animate(p, width = 480, height = 480)
+a_mgif <- image_read(a_gif)
+b_mgif <- image_read(b_gif)
+
+new_gif <- image_append(c(a_mgif[1], b_mgif[1]))
+for(i in 2:100){
+  combined <- image_append(c(a_mgif[i], b_mgif[i]))
+  new_gif <- c(new_gif, combined)
+}
+
+new_gif
+```
+
+## Multivariate Regression
+
+I was a little worried I'd have to start fiddling with Frisch-Waugh-Lovell by hand here but fortunately it turns out we can supply `delay_with` __any__ function of the data that returns a single statistic or group of statistics. Therefore, now we turn to metamers of MRW's actual regression equations:
+```{r}
+MRW_no_NA <- MRW_clean %>%
+  select(`1985`, s, n_g_d) %>% 
+  na.omit()
+
+reg_coefs_preserve <- delayed_with(coef(lm(log(`1985`) ~  s + n_g_d)))
+reg_metamers <- metamerize(MRW_no_NA, preserve = reg_coefs_preserve, N = 20000, signif = 2, perturbation = 0.001)
+reg_metamers <- trim(reg_metamers, 30*2)
+
+reg_gif_df <-  reg_metamers %>% 
+  imap_dfr(~(as_data_frame(.) %>% mutate(frame = .y)))
+```
+
+The above creates metamer draws of the original data keeping the regression coefficients fixed, now we combine these datasets with the coefficient data to make plotting easier:
+
+```{r}
+gif_coef_df <- reg_gif_df %>% 
+  group_by(frame) %>% 
+  do(model = lm(log(`1985`) ~ s + n_g_d, data = .)) %>% 
+  tidy(model) %>% 
+  select(frame, term, estimate) %>% 
+  spread(term, estimate) %>% 
+  rename(n_g_d_hat = `n_g_d`, s_hat = `s`, intercept = `(Intercept)`)
+
+reg_plot_pred_df <- left_join(reg_gif_df, gif_coef_df, by = "frame") %>% 
+  group_by(frame) %>% 
+  mutate(m_n = mean(n_g_d),
+         m_s = mean(s),
+    pred = intercept + n_g_d_hat*m_n + s_hat*m_s)
+
+gif_long_df <- reg_plot_pred_df %>% 
+  gather(x_variable, value, intercept, s, n_g_d)
+
+
+gif_long_df %>% 
+  ggplot(aes(x = value, y = log(`1985`))) +
+  geom_point() +
+  facet_wrap(~x_variable, scales = "free") +
+  geom_line(aes(x = value, y = pred), colour = "blue") +
+  transition_time(frame) +
+  ease_aes("linear") +
+  geom_line(aes(x = value, y = pred), colour = "blue", size = 1) +
+  labs(title = "Coefficient Estimates and Metamers")
+```
+
+
+This plot is identical to the above plot but we also show each short regression in red - i.e. each regression of $log(GDP_i)$ on $log(s_i)$ or $log(n_i+g_i+d_i)$ separetely. The difference between the slope estimates is stark:
+
+```{r}
+gif_long_df %>% 
+  ggplot(aes(x = value, y = log(`1985`))) +
+  geom_point() +
+  facet_wrap(~x_variable, scales = "free") +
+  geom_smooth(method = lm, se = FALSE, colour = "red") +
+  transition_time(frame) +
+  ease_aes("linear") +
+  geom_line(aes(x = value, y = pred), colour = "blue", size = 1) +
+  labs(title = "Frisch-Waugh-Lovell/OVB in Action",
+       caption = "The 'short' regression slopes are in red, the 'long' regression slopes in blue.")
+
+```
+The intercept seems to be flying around all over the place because each metamer is only exact to 2 significant figures - a threshold we set by default. It's worth mentioning that the x-axis has a different scale on each plot here which is driving some of the differences in the visualisation. I'm not 100% sure what precisely we can infer from this apart from "there's a bit of wriggle room in the data MRW observe but not much". 
+
+The above slopes look suspiciously flat to me so we quickly run a sanity check:
+```{r}
+orig_coef <- lm(log(`1985`) ~  s + n_g_d, data = MRW_clean) %>% 
+  tidy() %>% 
+  mutate(model = "original")
+
+
+metamer_coef <- reg_gif_df %>% 
+  filter(frame == 20) %>% 
+  lm(log(`1985`) ~   s + n_g_d, data = .) %>% 
+  tidy() %>% 
+  mutate(model = "metamer")
+
+bind_rows(orig_coef,
+          metamer_coef) %>% 
+  select(term, estimate, model) %>% 
+  spread(model, estimate) %>% 
+  mutate(difference = original - metamer)
+
+```
+Everything's working nicely although I wouldn't be able to sign either of the regressor slopes with just the graphs.
+
+
+Finally, we have a look at the distribution of coefficients in the metamer draws using `ggridges`:
+```{r}
+library(ggridges)
+metamer_coefs <- reg_gif_df %>% 
+  group_by(frame) %>% 
+  do(model = lm(log(`1985`) ~ s + n_g_d, data = .)) %>% 
+  tidy(model)
+
+metamer_coefs %>% 
+  ggplot(aes(x = estimate, y = term, fill = term)) +
+  geom_density_ridges() +
+  theme_ridges() +
+  labs(caption = "Distribution of regression coefficients from \n Matejka and Fitzmaurice (2017) metamer algorithm")
+```
+
+Okay, I really didn't think that one through and it was a __lot__ less informative than I thought it'd be. Facetted histograms with separate axes should do the trick:
+```{r}
+metamer_coefs %>% 
+  ggplot(aes(x = estimate, fill = term)) +
+  geom_density(alpha = 0.4, aes(y = ..scaled..*6)) +
+  geom_histogram(colour = "black") +
+  facet_wrap(~term, scales = "free_x") +
+  labs(title = "Empirical distribution of metamer regression coefficients",
+       caption = "Density scaled to integrate to 6.")
+```
+
+There seems to be a bimodal distribution common to each regressor estimate - at a tentative guess I'd imagine that's a quirk of the algorithm's search method.
+
+# Conclusion
+
+We've made some pretty visualisations of metamers in Mankiw, Romer and Weil's "A Contribution to the Empirics of Economic Growth". Apart from learning what a metamer is I'm not 100% sure what we've gained from this exercise in terms of greater insight into the Solow model or its estimation but the gifs do look cool.
