@@ -456,31 +456,16 @@ run_graphical_signal_analysis(cls_rolling_df_filtered,
 ```
 
 
-We can run this for many firms/pages:
+We can run this for many firms/pages in the book and use multiple firms to estimate the appropriate ccf lags:
 
 
 ```{r auto_plot01}
-a <- 5000
-b <-  1
-run_graphical_signal_analysis(df = cls_rolling_df_filtered,
-                                company_id_1 = a,
-                                company_id_2 = a + b,
-                                show_originals = TRUE,
-                                signal_variables = c("cls_namepersonnel",
-                                                   "cls_nameaddress",
-                                                   "cls_namevariable",
-                                                   "cls_namepage")) +
-    theme(legend.position = "bottom") +
-    guides(colour = "none") +
-  labs(y = "Signal",
-       x = "Row Number")
-b <- b + 1
+
+include_graphics("../assets/img/auto_plot19-1-1.png")
+
+
+
 ```
-
-
-
-
-This is what happens when we employ the signal analysis across 20 detected companies.
 
 ```{r auto_plot19}
 run_graphical_signal_analysis(df = cls_rolling_df_filtered,
