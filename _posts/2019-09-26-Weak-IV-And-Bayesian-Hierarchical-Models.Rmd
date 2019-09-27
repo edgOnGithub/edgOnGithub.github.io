@@ -1,14 +1,20 @@
 ---
 output: 
   html_document:
+    code_folding: show
     highlight: kate
     theme: paper
 editor_options:
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 
-```{r}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE,
+                      cache = TRUE,
+                      fig.align = "centre")
 library(mvtnorm)
 library(AER)
 library(tidyverse)
@@ -134,7 +140,7 @@ $$
 We need to use the multivariate normal here to fully account for posterior uncertainty across both relationships. Modelling the problem as two independent normals is the Bayesian analogue to computing two-stage least squares manually and forgetting to adjust our standard errors.
 
 
-Our covariance matrix looks like so:
+Where the multivariate normal covariance matrix describes the first stage and reduced form's variance and covariance:
 
 
 $$
@@ -191,16 +197,16 @@ That's almost all greek alphabet I know, so fortunately we can turn to actually 
 ## Sufficient Statistics
 
 
-Unfortunately, we're not _quite_ there yet - fitting this model in stan would take a __long__ time. Hierarchical models are notoriously hard to fit and we're bumping the difficulty up somewhat by estimating a multivariate hierarchical model.
+Unfortunately, fitting this model in stan would take a __long__ time. Hierarchical models are notoriously hard to fit and we're bumping the difficulty up somewhat by estimating a multivariate hierarchical model.
 
 
-Fortunately, help is at hand - we're using a multivariate normal likelihood which means we can exploit the fact that the normal is in the exponential family of distributions. For the univariate case, suppose we're estimating the mean of $n$ $x_i$ draws from a gaussian distribution, rather than evaluating the likelihood conditioning on _all_ the data we can just use $\sum^n_i{x_i}$ and $\sum^n_i{x_i^2}$ to evaluate the likelihood.
+Fortunately, help is at hand - we're using a multivariate normal likelihood which means we can exploit the fact that the normal is in the exponential family of distributions and therefore the factorisation criteria means we can find sufficient statistics for the normal likelihood. For the univariate case, suppose we're estimating the mean of $n$ $x_i$ draws from a gaussian distribution, rather than evaluating the likelihood conditioning on _all_ the data we can just use $\sum^n_i{x_i}$ and $\sum^n_i{x_i^2}$ to evaluate the likelihood.
 
 
 This is an incredible speed up for stan - rather than looping over $N$ datapoints we can loop over $J$ sets of sufficient statistics.
 
 
-To move from the univariate to multivariate case we're going to reparametrise the problem to create a residual matrix and compute $\bar{\mathbf{x}}$ and $\hat{\Sigma}}$
+To move from the univariate to multivariate case we're going to reparametrise the problem to create a residual matrix and compute $\bar{\mathbf{x}}$ and $\hat{\Sigma}$
 
 
 Therefore, define a residual matrix:
@@ -220,15 +226,17 @@ Therefore we need to factor the likelihood:
 
 
 $$
-\begin{aligned}
-L &= (2\pi)^{\frac{-n}{2}}|\Sigma|^{-\frac{n}{2}}exp(-\frac{1}{2} R'\Sigma^{-1}R) \\
-\text{log} L &\approx -\frac{n}{2}\Sigma^{-1}\bar{R'}\bar{R} - \frac{1}{2}  \text{trace}(\Sigma^{-1}R'R)
-\end{aligned}
+L = (2\pi)^{\frac{-n}{2}}|\Sigma|^{-\frac{n}{2}}exp(-\frac{1}{2} R'\Sigma^{-1}R)
+$$
+
+Into something like this:
+$$
+\text{log} L \approx -\frac{n}{2}\Sigma^{-1}\bar{R'}\bar{R} - \frac{1}{2}  \text{trace}(\Sigma^{-1}R'R)
 $$
 
 I'm not sure this is the most elegant formulation but it was the easiest for me to debug in R.
 
-Calculating $R'R$ (and the analogous  $\bar{R'}\bar{R}$)is just a matter of expanding out $(a' - b'd')(a-db)$:
+Calculating $R'R$ (and the analogous  $\bar{R'}\bar{R}$) is just a matter of expanding out $(a' - b'd')(a-db)$:
 
 $$
 \begin{aligned}
@@ -240,7 +248,6 @@ a'd &= \pmatrix{Y'Z \quad Y'X_e \\
                   
 d'd &= \pmatrix{Z'Z \quad Z'X_e \\
                 X'_eZ \quad X'_eX_e}
-
 \end{aligned}
 $$
 
@@ -251,8 +258,27 @@ That's the last of the algebra - I promise. It's worth noting that the elements 
 
 
 
+First we're going to define a function to generate our model coefficients. Here we've modelled our coefficients of interest, $\beta^{iv}_j$, as normal with mean 1 and variance 1. The first stage relationship of interest, $\pi_j$, will be centred at -2 with variance 1 also - however we've set $\pi_1 = 0$ for every draw of the simulation. Our exogenous variables are centred at 0, again with variance 1. 
 
 
+```{r}
+
+create_betas <- function(J = 5){
+  mu_iv <- 1
+  mu_fs <- -2
+
+  beta_iv <- rnorm(J, mu_iv, 1)
+  beta_fs <- rnorm(J, mu_fs, 1)
+  beta_exog <- rnorm(J, 0, 1)
+  beta_fs[1] <- 0
+  beta_fs
+  return(list(
+    beta_iv = beta_iv,
+    beta_exog = beta_exog,
+    beta_fs = beta_fs
+  ))
+}
+```
 
 
 
@@ -265,161 +291,281 @@ That's the last of the algebra - I promise. It's worth noting that the elements 
 <!-- ``` -->
 
 
+Now we're going to generate our $X, Z \text{ and } Y$ data:
+```{r}
+create_hier_iv_sim_data <- function(n = 1000,
+                                    J = 5,
+                                    beta_iv,
+                                    beta_fs,
+                                    beta_exog){
 
 
-<!-- ```{r} -->
+  z <- rnorm(n)
+  confounder <- rnorm(n)
+  x_exog <- rnorm(n)
 
-<!-- create_betas <- function(J = 5){ -->
-<!--   mu_iv <- 1 -->
-<!--   mu_fs <- -2 -->
+  Sigma = matrix(c(5,2.5,2.5,5),2,2)
+  ue = rmvnorm(n, rep(0,2), Sigma)
 
-<!--   beta_iv <- rnorm(J, mu_iv, 1) -->
-<!--   beta_fs <- rnorm(J, mu_fs, 1) -->
-<!--   beta_exog <- rnorm(J, 0, 1) -->
-<!--   beta_fs[1] <- 0 -->
-<!--   beta_fs -->
-<!--   return(list( -->
-<!--     beta_iv = beta_iv, -->
-<!--     beta_exog = beta_exog, -->
-<!--     beta_fs = beta_fs -->
-<!--   )) -->
-<!-- } -->
-<!-- ``` -->
+  x_endog <- ue[, 1] + confounder + beta_fs * z
+  y <- beta_iv * x_endog +  confounder +  beta_exog * x_exog + ue[, 2]
 
+  df <- data.frame(y,
+                   x_endog,
+                   z,
+                   id = 1:J,
+                   x_exog 
+                   )
 
+  return(list(data = df,
+              beta_iv = beta_iv,
+              beta_fs = beta_fs,
+              beta_exog = beta_exog))
+}
 
+```
 
-
-<!-- ```{r} -->
-<!-- create_hier_iv_sim_data <- function(n = 1000, -->
-<!--                                     J = 5, -->
-<!--                                     beta_iv, -->
-<!--                                     beta_fs, -->
-<!--                                     beta_exog){ -->
-
-
-<!--   z <- rnorm(n) -->
-<!--   confounder <- rnorm(n) -->
-<!--   x_exog <- rnorm(n) -->
-
-<!--   Sigma = matrix(c(5,2.5,2.5,5),2,2) -->
-<!--   ue = rmvnorm(n, rep(0,2), Sigma) -->
-<!--   # ue[, 1] <- rnorm(n) -->
-<!--   # ue[, 2] <- rnorm(n) -->
-
-<!--   x_endog <- ue[, 1] + confounder + beta_fs * z -->
-<!--   y <- beta_iv * x_endog +  confounder +  beta_exog * x_exog + ue[, 2] -->
-
-<!--   df <- data.frame(y, -->
-<!--                    x_endog, -->
-<!--                    z, -->
-<!--                    id = 1:J, -->
-<!--                    x_exog ## add betas here and rescale -->
-<!--                    ) -->
-
-<!--   return(list(data = df, -->
-<!--               beta_iv = beta_iv, -->
-<!--               beta_fs = beta_fs, -->
-<!--               beta_exog = beta_exog))   -->
-<!-- } -->
-
-<!-- ``` -->
-
-
-
-<!-- ```{r} -->
-<!-- fit_models <- function(sim_data, stan_model = hier_indep_model){ -->
-<!--   freq_result <- sim_data$data %>%  -->
-<!--     group_by(id) %>%  -->
-<!--     group_map(~ivreg(data = ., y ~ x_endog + x_exog | z + x_exog ) %>% tidy(conf.int = TRUE)) %>%  -->
-<!--     map_df(filter, term == "x_endog") %>%  -->
-<!--     mutate(true_term = sim_data$beta_iv, -->
-<!--            fist_stage = sim_data$beta_fs, -->
-<!--            beta_exog = sim_data$beta_exog, -->
-<!--            model = "frequentist", -->
-<!--            j = sim_data$data %>% select(id) %>% unique() %>% pull()) -->
-
-<!--   ss_stan <- hierarchical_iv_sufficient_statistics(sim_data$data, -->
-<!--                                                    "y", -->
-<!--                                                    "x_endog", -->
-<!--                                                    "x_exog", -->
-<!--                                                    "z", -->
-<!--                                                    "id") -->
-<!--   bhm_results <- sampling( -->
-<!--     stan_model, -->
-<!--     ss_stan, -->
-<!--     chains = 4, -->
-<!--     cores = 4, -->
-<!--     control = list(adapt_delta = 0.9999999999, -->
-<!--                    max_treedepth = 15, -->
-<!--                    metric = "dense_e") -->
-<!--   ) -->
+In the above function we've created dependence across the errors in each equation by setting the covariance on the off diagonal to 2.5.
 
 
 
 
+Now we create a function to actually fit the frequentist and Bayesian models - `hierarchical_iv_sufficient_statistics` just computes the SSs we derived above. We've set the `adapt_delta` argument to stan's `sampling` extremely high - this model code was originally for a slightly different data generating process and re-parametrising the model just for this post is something I'd rather avoid. One of the advantages of sufficient statistics is that we can be lazy and often bruteforce divergent transitions through a higher adapt delta instead of non-centred parametrisation.  
 
-<!--   model_draws <-   bhm_results %>%  -->
-<!--     gather_draws(beta_iv[j, k]) %>%  -->
-<!--     median_qi() %>%  -->
-<!--     to_broom_names() %>%  -->
-<!--     ungroup() %>%  -->
-<!--     mutate(true_term = sim_data$beta_iv, -->
-<!--            model = "BHM") -->
+```{r}
+fit_models <- function(sim_data, stan_model = hier_indep_model){
+  
+  # Calculating no pooling frequentist results using group_map
+  freq_result <- sim_data$data %>%
+    group_by(id) %>%
+    group_map(~ivreg(data = ., y ~ x_endog + x_exog | z + x_exog ) %>% tidy(conf.int = TRUE)) %>%
+    map_df(filter, term == "x_endog") %>%
+    mutate(true_term = sim_data$beta_iv,
+           fist_stage = sim_data$beta_fs,
+           beta_exog = sim_data$beta_exog,
+           model = "frequentist",
+           j = sim_data$data %>% select(id) %>% unique() %>% pull())
 
-<!--   both_draws <- bind_rows( -->
-<!--     model_draws, -->
-<!--     freq_result -->
-<!--   ) -->
+  
+  # Calculating sufficient statistics to pass to stan
+  ss_stan <- hierarchical_iv_sufficient_statistics(sim_data$data,
+                                                   "y",
+                                                   "x_endog",
+                                                   "x_exog",
+                                                   "z",
+                                                   "id")
+  # Sampling from the model
+  bhm_results <- sampling(
+    stan_model,
+    ss_stan,
+    chains = 4,
+    cores = 4,
+    control = list(adapt_delta = 0.9999999999,
+                   max_treedepth = 15)
+  )
 
-<!--   return(list(both_draws = both_draws, -->
-<!--               bhm_model = bhm_results)) -->
+  # Computing posterior medians
+  model_draws <-   bhm_results %>%
+    gather_draws(beta_iv[j, k]) %>%
+    median_qi() %>%
+    to_broom_names() %>%
+    ungroup() %>%
+    mutate(true_term = sim_data$beta_iv,
+           model = "BHM")
+  # Combining results across models
+  both_draws <- bind_rows(
+    model_draws,
+    freq_result
+  )
+  # Returning model results and stan object for debugging
+  return(list(both_draws = both_draws,
+              bhm_model = bhm_results))
 
-<!-- } -->
-
-
-<!-- ``` -->
-
-
-
-
-<!-- ```{r} -->
-
-<!-- anon_func <- function(draw){ -->
-<!--   betas <- create_betas() -->
-<!--   sim_data <- create_hier_iv_sim_data(n = 10000, -->
-<!--                                       J = 5, -->
-<!--                                       beta_iv = betas$beta_iv, -->
-<!--                                       beta_fs = betas$beta_fs, -->
-<!--                                       beta_exog = betas$beta_exog) -->
-<!--   model_fitted <- fit_models(sim_data, -->
-<!--                               stan_model = hier_indep_model) -->
-<!--   model_results <- model_fitted$both_draws -->
-<!--   n_divergent <- get_sampler_params(model_fitted$bhm_model, inc_warmup = FALSE) %>%  -->
-<!--     map(data.frame) %>%  -->
-<!--     map_dfr(select, divergent__) %>%  -->
-<!--     sum() -->
-
-<!--   n_rhat_too_high <- (summary(model_fitted$bhm_model))$summary %>%  -->
-<!--     as.data.frame() %>%  -->
-<!--     filter(Rhat > 1.1) %>%  -->
-<!--     nrow() -->
-
-<!--   problematic_rhat <- (summary(model_fitted$bhm_model))$summary %>%  -->
-<!--     as.data.frame() %>%  -->
-<!--     filter(Rhat > 1.1) %>%  -->
-<!--     rownames_to_column("variable") %>%  -->
-<!--     select(variable) %>%  -->
-<!--     pull() %>%  -->
-<!--     paste0(collapse = ",") -->
-
-<!--   model_results$divergent <- n_divergent -->
-<!--   model_results$draw <- draw -->
-<!--   model_results$n_rhat_issues <- n_rhat_too_high -->
-<!--   model_results$problematic_rhat_variables <- problematic_rhat -->
-<!--   return(model_results) -->
-<!-- } -->
+}
 
 
-<!-- ``` -->
+```
+
+
+
+Next up, is the stan model - one of the drawbacks of sufficient statistics is that stan models, which aren't particularly literate at the best of times, are a bit harder to follow:
+
+```{r}
+# stan model here
+
+```
+
+
+
+
+
+Finally, we define an anonymous function to pull all of the above together; record some MCMC diagnostics such as split Rhat and finally, spit out a dataframe with model estimates. The last few lines perform the simulation.
+
+```{r, eval = FALSE}
+
+anon_func <- function(draw){
+  betas <- create_betas()
+  sim_data <- create_hier_iv_sim_data(n = 10000,
+                                      J = 5,
+                                      beta_iv = betas$beta_iv,
+                                      beta_fs = betas$beta_fs,
+                                      beta_exog = betas$beta_exog)
+  model_fitted <- fit_models(sim_data,
+                              stan_model = hier_indep_model)
+  model_results <- model_fitted$both_draws
+  n_divergent <- get_sampler_params(model_fitted$bhm_model, inc_warmup = FALSE) %>%
+    map(data.frame) %>%
+    map_dfr(select, divergent__) %>%
+    sum()
+
+  n_rhat_too_high <- (summary(model_fitted$bhm_model))$summary %>%
+    as.data.frame() %>%
+    filter(Rhat > 1.1) %>%
+    nrow()
+
+  problematic_rhat <- (summary(model_fitted$bhm_model))$summary %>%
+    as.data.frame() %>%
+    filter(Rhat > 1.1) %>%
+    rownames_to_column("variable") %>%
+    select(variable) %>%
+    pull() %>%
+    paste0(collapse = ",")
+
+  model_results$divergent <- n_divergent
+  model_results$draw <- draw
+  model_results$n_rhat_issues <- n_rhat_too_high
+  model_results$problematic_rhat_variables <- problematic_rhat
+  return(model_results)
+}
+
+# Set n core for stan
+options(mc.cores = 4)
+bhm_simmed_draws <- 1:1000 %>% 
+  map_dfr(anon_func)
+
+```
+
+
+# Results
+
+
+```{r}
+bhm_simmed_draws <- read_csv("../../../../Dropbox-Ed/Ed/DMLD-BHM/data/output_data/model_draws/weak_iv_sim_draws.csv")
+
+```
+
+
+```{r}
+bhm_simmed_draws %>% 
+  filter(draw %in% 425 ) %>%
+  ggplot(aes(x = estimate,
+             xmin = conf.low,
+             xmax = conf.high,
+             y = j,
+             colour = model)) +
+  geom_pointrangeh(position = position_dodge2v(0.5)) +
+  geom_point(inherit.aes = FALSE,
+             aes(x = true_term,
+                 y = j), shape = 3
+  ) +
+  theme_minimal() +
+  scale_y_continuous(breaks = 1:18) +
+  labs(subtitle = paste0("draw: ", 425),
+       title = "Weak IV: BHM vs Frequentist No Pooling")
+```
+
+
+
+
+
+
+
+```{r}
+bhm_simmed_draws %>% 
+  filter(n_rhat_issues == 0) %>%
+  filter(divergent <= 10) %>% 
+  group_by(model, j) %>% 
+  summarise(mse = mean((true_term - estimate)^2)) %>% 
+  spread(model, mse) %>% 
+  knitr::kable(digits = 4)
+```
+
+
+```{r}
+
+
+comp_plot_df_width <- bhm_simmed_draws %>% 
+  filter(n_rhat_issues == 0) %>%
+  filter(divergent < 10) %>% 
+  filter(j == 1) %>% 
+  mutate(ci_width = abs(conf.high - conf.low),
+         ci_width_relative = ci_width / abs(true_term)) %>% 
+  group_by(model) %>% 
+  mutate(mean_ci_width_rel = log10(mean(ci_width_relative)))
+
+ 
+comp_plot_shadow <- comp_plot_df_width %>%
+  ungroup() %>% 
+  select(-model)
+
+comp_plot_df_width %>% 
+  ggplot(aes(x = log10(ci_width_relative),
+             fill = model)) +
+  geom_histogram(data = comp_plot_shadow,
+                 fill = "grey") +
+  geom_histogram(colour = "black") +
+  facet_wrap(~model) +
+  theme_minimal() +
+  geom_vline(aes(xintercept = mean_ci_width_rel),
+             linetype = "longdash") +
+  labs(title = "Confidence Interval Width / Point Estimate",
+       caption = "log scale, dotted line indicates mean of datapoints.")
+
+
+```
+
+
+
+```{r}
+hist_error_sq <- bhm_simmed_draws %>% 
+  filter(n_rhat_issues == 0,
+         divergent < 10) %>% 
+  mutate(error = (true_term - estimate)^2) 
+
+hist_error_sq_subset <- hist_error_sq %>% 
+  select(-model)
+
+hist_error_sq %>% 
+  ggplot(aes(x = log10(error),
+             fill = model)) +
+  geom_histogram(data = hist_error_sq_subset,
+                 fill = "grey",
+                 bins = 45,
+                 size = 0.5) +
+  geom_histogram(colour = "black",
+                 bins = 45,
+                 size = 0.5) + 
+  facet_grid(j ~ model,
+             scales = "free_y") +
+  theme_bw()  +
+  labs(title = "Squared Error Draws Across Groups",
+       subtitle = "Log10 scale")
+
+```
+
+
+```{r}
+
+library(ggridges)
+
+
+hist_error_sq %>% 
+  ggplot(aes(x = log10(error),
+             fill = model,
+             y = factor(j))) +
+  geom_density_ridges(alpha = 0.7,quantile_lines = TRUE,
+                      quantiles = 2
+                      ) +
+  theme_ridges()
+```
 
