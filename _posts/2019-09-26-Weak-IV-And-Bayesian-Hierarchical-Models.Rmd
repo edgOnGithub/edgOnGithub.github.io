@@ -1,0 +1,382 @@
+---
+output: 
+  html_document:
+    highlight: kate
+    theme: paper
+editor_options:
+  chunk_output_type: inline
+---
+
+
+```{r}
+library(mvtnorm)
+library(AER)
+library(tidyverse)
+library(broom)
+library(rstan)
+library(tidybayes)
+library(ggstance)
+```
+
+
+In this post we're going to demonstrate the use of Bayesian hierarchical models to overcome the weak instruments problem. We essentially recreate the work of [Chamberlain and Imbens, 2003](https://doi.org/10.1111/j.1468-0262.2004.00485.x) which I definitely should have read _before_ embarking on this project and not _after_ - ah well, we live and learn.
+
+
+
+# Setting up The Problem
+
+There's a lot of material on weak instruments online so we'll keep this short - a simple, canonical weak instrument problem looks something like this:
+
+
+$$
+\begin{aligned}
+\beta - \hat{\beta} &= (Z'X)^{-1}Z'\varepsilon \\
+&\rightarrow (0)^{-1}(0)
+\end{aligned}
+$$
+
+Even asympotically as $N$ grows the first stage relationship effectively disappears. We can think of an instrument as an exogenous shock to one part of the system (thank you exlcusion restriction) and in the weak instruments problem this shock is too small - we get a nasty limiting distribution. 
+
+
+
+
+Rephrasing the above along Mostly Harmless lines using the wald estimator we have:
+
+$$
+\begin{aligned}
+y_i &= z_i\gamma + u_i \text{  (Reduced Form)}\\
+x_i &= z_i\pi + e_i \text{ (First Stage)} \\ \\
+\hat{\beta}_{iv} &= \frac{\hat{\gamma}}{\hat{\pi}}
+\end{aligned}
+$$
+
+How do we fix this? Well a good way would be to stop dividing by 0 - bad things tend to happen when we divide by 0.
+
+
+# A Simple Bayesian Approach
+
+
+Let's embed the above in a Bayesian setting, focusing on the first stage for now:
+$$
+\begin{aligned}
+\pi &\sim N(\mu, \lambda^{-1} ) \\
+X &= Z\pi + e \\ 
+\pi_{\text{posterior}} &= (Z'Z + \lambda)^{-1}(Z'Z\hat{\pi} + \lambda\mu)
+\end{aligned}
+$$
+
+
+The first line indicates lays out our prior over $\pi$, we've used a precision parametrisation to make the interpretation of $\lambda$ easier. The second line just swtiches notation slightly towards a matrix algebra formulation. Finally, we come to the posterior. 
+
+The posterior of $\pi$ is very similar to the frequentist solution but we have this extra $\lambda$ term - the interpretation here is that the posterior is essentially a precision weighted average of our prior and the data where $\hat{\pi}$ is the least squares solution familiar to frequentists. 
+
+# How does this help us?
+
+Well, we require $\pi_{\text{posterior}} \nrightarrow 0$ whilst $\hat{\pi} \rightarrow 0$. Therefore, we _really, really_ want $\mu \nrightarrow 0$.
+
+
+This gives us two potential solutions:
+
+- Non-centred prior, $\pi \sim N(f(n)\times\mu, \lambda^{-1})$ where $\mu \neq 0$ (Don't do this, please).
+
+- __Bayesian Hierarchical model, $\hat{\mu}$ is a precision weighted average of $\hat{\pi}_j$ for all groups/levels across our data.__ 
+
+
+
+
+We're going to focus on the second bullet point in the rest of this post.
+
+# Bayesian Hierarchical Model
+
+
+Suppose we observe multiple natural groups or levels in our data indexed by $j$ - maybe a treatment effect from a federal policy we observe across states or cities. In some states we might face a very weak instrument but in others a much stronger instrument. We know that what we learn from one treatment effect should probably generalise, to a degree, to another city. A Bayesian hierarchical model lets us put structure over this generalisability; we want to separate sampling variation from true heterogeneity in treatment effects; introduce regularisation through hierarchical shrinkage and overcome the weak instruments problem - a BHM brings all these good things to the table.
+
+
+
+Sometimes a BHM is simplest to think about when we draw it, here $\beta_j$ indexes _cities_ __not__ _regressors_:
+
+
+![](../plots/DIA_BHM.png)
+
+
+
+
+But we're not quite done - we want to perform instrumental variables estimation, not simple OLS. The solution - add another dimension:
+
+$$
+\begin{aligned}
+\mathcal{Y}_{j} &= (\textbf{Y}_{j} \quad \textbf{X}_j) \\
+\mathcal{Y}_j &\sim MVN( \mathcal{X}_j \mathcal{B}_j, \Omega_j) \quad \forall i, j
+\end{aligned}
+$$
+
+where:
+
+$$
+\begin{aligned}
+\text{Y}_{ij} &= \widehat{\text{X}}^n_{ij}\beta_j^{iv} + X_{ij}^e\beta^{e}_j + u_{ij} \\  
+\text{X}_{ij} &= \text{Z}_{ij}\pi_j + X^e_{ij}\gamma_j + e_{ij}
+\end{aligned}
+$$
+
+Stacking into block matrices gives:
+$$
+\begin{aligned}
+(\textbf{Y}_j \quad \textbf{X}_{j}) &= (\text{Z}_{ij} \quad X^e_{ij}) \begin{pmatrix}
+\pi_j \beta^{iv}_{j} & \pi_j \\
+\gamma_j \beta^{iv}_j + \beta^e_j & \gamma_j
+\end{pmatrix} \\
+&= \mathcal{X}_j (\mathbf{b}^r \quad \mathbf{b}^f) \\
+ &= \mathcal{X}_j \mathcal{B}_j
+ \end{aligned}
+$$
+
+We need to use the multivariate normal here to fully account for posterior uncertainty across both relationships. Modelling the problem as two independent normals is the Bayesian analogue to computing two-stage least squares manually and forgetting to adjust our standard errors.
+
+
+Our covariance matrix looks like so:
+
+
+$$
+\Omega_j = \begin{pmatrix}
+\sigma^{2}_{r,j} & \sigma_{fr, j} \\
+\sigma_{fr, j} & \sigma^{2}_{f, j}
+\end{pmatrix}
+$$
+
+
+## Priors
+
+
+We need to put some priors on all of the above, here we use a pretty standard set up:
+
+
+
+
+$$
+\begin{aligned}
+    \mathbf{b}^{d}_j &\sim MVN(\mu^{d}, \Sigma^d) & r, f \in d \\
+    \mu^{r}, \mu^{f} &\sim N(0, 10)
+\end{aligned}
+$$
+
+
+As is common in Bayesian estimation we split our covariance matrices up into a scale and correlation matrix:
+
+$$
+\begin{aligned}
+\Sigma &= \text{diag}(\tau) \Phi \text{diag}(\tau) \\
+\Omega_j &= \text{diag}(\nu_j) \Theta_j \text{diag}(\nu_j)
+\end{aligned}
+$$
+
+
+
+
+with priors:
+
+$$
+\begin{aligned}
+\tau, \nu &\sim \text{Cauchy}^+(0, 5) \\
+\Phi, \Theta_j &\sim \text{LKJ}(2)
+\end{aligned}
+$$
+
+
+
+That's almost all greek alphabet I know, so fortunately we can turn to actually estimating this monster now.
+
+
+
+## Sufficient Statistics
+
+
+Unfortunately, we're not _quite_ there yet - fitting this model in stan would take a __long__ time. Hierarchical models are notoriously hard to fit and we're bumping the difficulty up somewhat by estimating a multivariate hierarchical model.
+
+
+Fortunately, help is at hand - we're using a multivariate normal likelihood which means we can exploit the fact that the normal is in the exponential family of distributions. For the univariate case, suppose we're estimating the mean of $n$ $x_i$ draws from a gaussian distribution, rather than evaluating the likelihood conditioning on _all_ the data we can just use $\sum^n_i{x_i}$ and $\sum^n_i{x_i^2}$ to evaluate the likelihood.
+
+
+This is an incredible speed up for stan - rather than looping over $N$ datapoints we can loop over $J$ sets of sufficient statistics.
+
+
+We're going to skip the algebra for the multivariate normal likelihood - it took a while to bash through everything  - but it's an analogous process to the univariate case. We reparametrise the problem to create a residual matrix and compute $\bar{\mathbf{x}}$ and $\hat{\Sigma}}$
+
+
+
+# Generating Fake Data
+
+
+
+
+
+
+
+
+
+<!-- ```{r} -->
+<!-- source("code/SS_functions.R") -->
+<!-- rstan_options(auto_write = TRUE) -->
+<!-- options(mc.cores = 4) -->
+
+<!-- ``` -->
+
+
+
+
+<!-- ```{r} -->
+
+<!-- create_betas <- function(J = 5){ -->
+<!--   mu_iv <- 1 -->
+<!--   mu_fs <- -2 -->
+
+<!--   beta_iv <- rnorm(J, mu_iv, 1) -->
+<!--   beta_fs <- rnorm(J, mu_fs, 1) -->
+<!--   beta_exog <- rnorm(J, 0, 1) -->
+<!--   beta_fs[1] <- 0 -->
+<!--   beta_fs -->
+<!--   return(list( -->
+<!--     beta_iv = beta_iv, -->
+<!--     beta_exog = beta_exog, -->
+<!--     beta_fs = beta_fs -->
+<!--   )) -->
+<!-- } -->
+<!-- ``` -->
+
+
+
+
+
+<!-- ```{r} -->
+<!-- create_hier_iv_sim_data <- function(n = 1000, -->
+<!--                                     J = 5, -->
+<!--                                     beta_iv, -->
+<!--                                     beta_fs, -->
+<!--                                     beta_exog){ -->
+
+
+<!--   z <- rnorm(n) -->
+<!--   confounder <- rnorm(n) -->
+<!--   x_exog <- rnorm(n) -->
+
+<!--   Sigma = matrix(c(5,2.5,2.5,5),2,2) -->
+<!--   ue = rmvnorm(n, rep(0,2), Sigma) -->
+<!--   # ue[, 1] <- rnorm(n) -->
+<!--   # ue[, 2] <- rnorm(n) -->
+
+<!--   x_endog <- ue[, 1] + confounder + beta_fs * z -->
+<!--   y <- beta_iv * x_endog +  confounder +  beta_exog * x_exog + ue[, 2] -->
+
+<!--   df <- data.frame(y, -->
+<!--                    x_endog, -->
+<!--                    z, -->
+<!--                    id = 1:J, -->
+<!--                    x_exog ## add betas here and rescale -->
+<!--                    ) -->
+
+<!--   return(list(data = df, -->
+<!--               beta_iv = beta_iv, -->
+<!--               beta_fs = beta_fs, -->
+<!--               beta_exog = beta_exog))   -->
+<!-- } -->
+
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- fit_models <- function(sim_data, stan_model = hier_indep_model){ -->
+<!--   freq_result <- sim_data$data %>%  -->
+<!--     group_by(id) %>%  -->
+<!--     group_map(~ivreg(data = ., y ~ x_endog + x_exog | z + x_exog ) %>% tidy(conf.int = TRUE)) %>%  -->
+<!--     map_df(filter, term == "x_endog") %>%  -->
+<!--     mutate(true_term = sim_data$beta_iv, -->
+<!--            fist_stage = sim_data$beta_fs, -->
+<!--            beta_exog = sim_data$beta_exog, -->
+<!--            model = "frequentist", -->
+<!--            j = sim_data$data %>% select(id) %>% unique() %>% pull()) -->
+
+<!--   ss_stan <- hierarchical_iv_sufficient_statistics(sim_data$data, -->
+<!--                                                    "y", -->
+<!--                                                    "x_endog", -->
+<!--                                                    "x_exog", -->
+<!--                                                    "z", -->
+<!--                                                    "id") -->
+<!--   bhm_results <- sampling( -->
+<!--     stan_model, -->
+<!--     ss_stan, -->
+<!--     chains = 4, -->
+<!--     cores = 4, -->
+<!--     control = list(adapt_delta = 0.9999999999, -->
+<!--                    max_treedepth = 15, -->
+<!--                    metric = "dense_e") -->
+<!--   ) -->
+
+
+
+
+
+<!--   model_draws <-   bhm_results %>%  -->
+<!--     gather_draws(beta_iv[j, k]) %>%  -->
+<!--     median_qi() %>%  -->
+<!--     to_broom_names() %>%  -->
+<!--     ungroup() %>%  -->
+<!--     mutate(true_term = sim_data$beta_iv, -->
+<!--            model = "BHM") -->
+
+<!--   both_draws <- bind_rows( -->
+<!--     model_draws, -->
+<!--     freq_result -->
+<!--   ) -->
+
+<!--   return(list(both_draws = both_draws, -->
+<!--               bhm_model = bhm_results)) -->
+
+<!-- } -->
+
+
+<!-- ``` -->
+
+
+
+
+<!-- ```{r} -->
+
+<!-- anon_func <- function(draw){ -->
+<!--   betas <- create_betas() -->
+<!--   sim_data <- create_hier_iv_sim_data(n = 10000, -->
+<!--                                       J = 5, -->
+<!--                                       beta_iv = betas$beta_iv, -->
+<!--                                       beta_fs = betas$beta_fs, -->
+<!--                                       beta_exog = betas$beta_exog) -->
+<!--   model_fitted <- fit_models(sim_data, -->
+<!--                               stan_model = hier_indep_model) -->
+<!--   model_results <- model_fitted$both_draws -->
+<!--   n_divergent <- get_sampler_params(model_fitted$bhm_model, inc_warmup = FALSE) %>%  -->
+<!--     map(data.frame) %>%  -->
+<!--     map_dfr(select, divergent__) %>%  -->
+<!--     sum() -->
+
+<!--   n_rhat_too_high <- (summary(model_fitted$bhm_model))$summary %>%  -->
+<!--     as.data.frame() %>%  -->
+<!--     filter(Rhat > 1.1) %>%  -->
+<!--     nrow() -->
+
+<!--   problematic_rhat <- (summary(model_fitted$bhm_model))$summary %>%  -->
+<!--     as.data.frame() %>%  -->
+<!--     filter(Rhat > 1.1) %>%  -->
+<!--     rownames_to_column("variable") %>%  -->
+<!--     select(variable) %>%  -->
+<!--     pull() %>%  -->
+<!--     paste0(collapse = ",") -->
+
+<!--   model_results$divergent <- n_divergent -->
+<!--   model_results$draw <- draw -->
+<!--   model_results$n_rhat_issues <- n_rhat_too_high -->
+<!--   model_results$problematic_rhat_variables <- problematic_rhat -->
+<!--   return(model_results) -->
+<!-- } -->
+
+
+<!-- ``` -->
+
