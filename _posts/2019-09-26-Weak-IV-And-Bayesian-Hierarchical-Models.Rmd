@@ -96,7 +96,7 @@ Suppose we observe multiple natural groups or levels in our data indexed by $j$ 
 Sometimes a BHM is simplest to think about when we draw it, here $\beta_j$ indexes _cities_ __not__ _regressors_:
 
 
-![](../plots/DIA_BHM.png)
+<!-- ![](../plots/DIA_BHM.png) -->
 
 
 
@@ -200,9 +200,52 @@ Fortunately, help is at hand - we're using a multivariate normal likelihood whic
 This is an incredible speed up for stan - rather than looping over $N$ datapoints we can loop over $J$ sets of sufficient statistics.
 
 
-We're going to skip the algebra for the multivariate normal likelihood - it took a while to bash through everything  - but it's an analogous process to the univariate case. We reparametrise the problem to create a residual matrix and compute $\bar{\mathbf{x}}$ and $\hat{\Sigma}}$
+To move from the univariate to multivariate case we're going to reparametrise the problem to create a residual matrix and compute $\bar{\mathbf{x}}$ and $\hat{\Sigma}}$
 
 
+Therefore, define a residual matrix:
+$$
+R = (Y_{j} \quad X^n_j)  -  (Z_{j} \quad X^e_{j}) \begin{pmatrix}
+\pi_j \beta^{iv}_{j} & \pi_j \\
+\gamma_j \beta^{iv}_j + \beta^e_j & \gamma_j
+\end{pmatrix} \\
+$$
+
+For simplicities sake let's rewrite this as:
+
+$$
+R = (a - db)
+$$
+Therefore we need to factor the likelihood:
+
+
+$$
+\begin{aligned}
+L &= (2\pi)^{\frac{-n}{2}}|\Sigma|^{-\frac{n}{2}}exp(-\frac{1}{2} R'\Sigma^{-1}R) \\
+\text{log} L &\approx -\frac{n}{2}\Sigma^{-1}\bar{R'}\bar{R} - \frac{1}{2}  \text{trace}(\Sigma^{-1}R'R)
+\end{aligned}
+$$
+
+I'm not sure this is the most elegant formulation but it was the easiest for me to debug in R.
+
+Calculating $R'R$ (and the analogous  $\bar{R'}\bar{R}$)is just a matter of expanding out $(a' - b'd')(a-db)$:
+
+$$
+\begin{aligned}
+R'R &= a'a - 2a'db + b'd'db \\
+a'a &= \pmatrix{Y'Y \quad Y'X_n \\
+                X'_nY \quad X'_nX_n} \\
+a'd &= \pmatrix{Y'Z \quad Y'X_e \\
+                  X'_nZ \quad X'_nX_e} \\
+                  
+d'd &= \pmatrix{Z'Z \quad Z'X_e \\
+                X'_eZ \quad X'_eX_e}
+
+\end{aligned}
+$$
+
+
+That's the last of the algebra - I promise. It's worth noting that the elements of each matrix are themselves block matrices, writing the sufficient statistics out in their most general format makes it easier to add multiple instruments and covariates later down the line.
 
 # Generating Fake Data
 
