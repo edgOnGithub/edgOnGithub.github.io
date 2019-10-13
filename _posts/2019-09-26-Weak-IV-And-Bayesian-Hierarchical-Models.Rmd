@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE,
                       warning = FALSE,
                       message = FALSE,
                       cache = TRUE,
-                      fig.align = "centre")
+                      fig.align = "center")
 library(mvtnorm)
 library(AER)
 library(tidyverse)
@@ -25,7 +25,7 @@ library(ggstance)
 ```
 
 
-In this post we're going to demonstrate the use of Bayesian hierarchical models to overcome the weak instruments problem. We essentially recreate the work of [Chamberlain and Imbens, 2003](https://doi.org/10.1111/j.1468-0262.2004.00485.x) which I definitely should have read _before_ embarking on this project and not _after_ - ah well, we live and learn.
+In this post we're going to demonstrate the use of Bayesian hierarchical models to overcome the weak instruments problem. We essentially recreate the work of [Chamberlain and Imbens, 2003](https://doi.org/10.1111/j.1468-0262.2004.00485.x) which I definitely should have read _before_ embarking on this project and not _after_ - ah well, we live and learn. We're going to fit a moderately complicated instrumental variables model in [stan](https://mc-stan.org/) along the way. The set-up is a little involved with this one, so feel free to skip straight to the results at the bottom - there are some pretty plots.
 
 
 
@@ -41,12 +41,12 @@ $$
 \end{aligned}
 $$
 
-Even asympotically as $N$ grows the first stage relationship effectively disappears. We can think of an instrument as an exogenous shock to one part of the system (thank you exlcusion restriction) and in the weak instruments problem this shock is too small - we get a nasty limiting distribution. 
+Even asympotically as $N$ grows the first stage relationship effectively disappears. We can think of an instrument as an exogenous shock to one part of the system and in the weak instruments problem this shock is too small - we get a nasty limiting distribution. 
 
 
 
 
-Rephrasing the above along Mostly Harmless lines using the wald estimator we have:
+Rephrasing the above along Mostly Harmless lines using the Wald estimator we have:
 
 $$
 \begin{aligned}
@@ -72,7 +72,7 @@ X &= Z\pi + e \\
 $$
 
 
-The first line indicates lays out our prior over $\pi$, we've used a precision parametrisation to make the interpretation of $\lambda$ easier. The second line just swtiches notation slightly towards a matrix algebra formulation. Finally, we come to the posterior. 
+The first line indicates lays out our prior over $\pi$, we've used a precision parametrisation to make the interpretation of $\lambda$ easier. The second line just switches notation slightly towards a matrix algebra formulation. Finally, we come to the posterior. 
 
 The posterior of $\pi$ is very similar to the frequentist solution but we have this extra $\lambda$ term - the interpretation here is that the posterior is essentially a precision weighted average of our prior and the data where $\hat{\pi}$ is the least squares solution familiar to frequentists. 
 
@@ -89,20 +89,52 @@ This gives us two potential solutions:
 
 
 
+Using a BHM:
 
-We're going to focus on the second bullet point in the rest of this post.
+$$
+\begin{aligned}
+\mu \sim N(\hat{\mu}, \hat{V}_{\mu}) \\ 
+\hat{\mu} = \frac{\sum^J\frac{\hat{\pi}_j}{\sigma^2_j + \lambda^2}}{\sum^J\frac{1}{\sigma^2_j + \lambda^2}}
+\end{aligned}
+$$
+
+
+Where $\sigma^2_j$ indicates the variance of the model's "lower level"  ($X_{ij} = Z_{ij}\pi_j + e_{ij};\ e_{ij} \sim N(0, \sigma^2_j)$).
+
+Essentially, weak instrument groups are identified off the population mean which produces a sensible measure of underlying uncertainty in weak instrument groups. The population mean is a variance weighted average of each group's parameter - if we see a strong signal from one group it has more weight in determining the overall population mean.
+    
+Weak instrument identification off the population mean is reflected in larger probability intervals for weaker groups, _however_ the limiting distribution is well-behaved and _non-degenerate_ unlike its frequentist cousin.
+
+We're going to focus building a model using the second bullet point in the rest of this post.
 
 # Bayesian Hierarchical Model
+
+The above brushed over what a Bayesian hierarchical model actually _does_ - we'll talk very briefly about the intuition here.
 
 
 Suppose we observe multiple natural groups or levels in our data indexed by $j$ - maybe a treatment effect from a federal policy we observe across states or cities. In some states we might face a very weak instrument but in others a much stronger instrument. We know that what we learn from one treatment effect should probably generalise, to a degree, to another city. A Bayesian hierarchical model lets us put structure over this generalisability; we want to separate sampling variation from true heterogeneity in treatment effects; introduce regularisation through hierarchical shrinkage and overcome the weak instruments problem - a BHM brings all these good things to the table.
 
 
 
-Sometimes a BHM is simplest to think about when we draw it, here $\beta_j$ indexes _cities_ __not__ _regressors_:
+Sometimes a BHM is simplest to think about when we draw it, here $\beta_j$ indexes _groups_ __not__ _regressors_:
+
+![](../assets/img/DIA_BHM.png)
 
 
-<!-- ![](../plots/DIA_BHM.png) -->
+We model each group's $\beta_j$ as being drawn from some underlying _population_ or _global_ parameter, $\mu$. We're Bayesians so we put a prior probability distribution over $\mu$ - we call these _hyper_-priors, here $N(0, 10)$.
+
+
+
+
+Typically in frequentist estimation we face two extremes when data is observed across multiple groups, for instance consider panel data:
+
+- We can pool everything together and ignore heterogeneity across a dimension e.g. pooling all observations across time into one "cross-section".
+
+- Running a separate regression for each time period; we call this the no-pooling model.
+
+Another alternative is to estimate a fixed effects regression - we estimate a dummy for each individual or time period or both. The fixed effects regression is sort of a half way house where we let an entity's intercept vary but still maintain constant slopes across individuals.
+
+The BHM represents a compromise between the two extremes - it can return the pooling or no-pooling estimate but also some weighted average between. The solution a BHM will return will depend on the _hierarchical variance_ of the data; essentially we ask: how much of the difference in treatment effects is due to sampling variation vs true heterogeneity. As such, Bayesian hierarchical models are often fit with varying slopes and intercepts - not only are there additive differences between group outcomes but the treatment can have differential effects across groups.^[For further reading on BHMs Ben Lampart has a pretty good intro book and Bayesian Data Analysis 3 provides some more depth.]
 
 
 
@@ -190,7 +222,7 @@ $$
 
 
 
-That's almost all greek alphabet I know, so fortunately we can turn to actually estimating this monster now.
+That's almost all the Greek alphabet I know, so fortunately we can turn to actually estimating this monster now.
 
 
 
@@ -200,10 +232,10 @@ That's almost all greek alphabet I know, so fortunately we can turn to actually 
 Unfortunately, fitting this model in stan would take a __long__ time. Hierarchical models are notoriously hard to fit and we're bumping the difficulty up somewhat by estimating a multivariate hierarchical model.
 
 
-Fortunately, help is at hand - we're using a multivariate normal likelihood which means we can exploit the fact that the normal is in the exponential family of distributions and therefore the factorisation criteria means we can find sufficient statistics for the normal likelihood. For the univariate case, suppose we're estimating the mean of $n$ $x_i$ draws from a gaussian distribution, rather than evaluating the likelihood conditioning on _all_ the data we can just use $\sum^n_i{x_i}$ and $\sum^n_i{x_i^2}$ to evaluate the likelihood.
+Fortunately, help is at hand - we're using a multivariate normal likelihood which means we can exploit the fact that the normal is in the exponential family of distributions and therefore the factorisation criteria means we can find sufficient statistics for the normal likelihood. For the univariate case, suppose we're estimating the mean of $n$ $x_i$ draws from a Gaussian distribution, rather than evaluating the likelihood conditioning on _all_ the data we can just use $\sum^n_i{x_i}$ and $\sum^n_i{x_i^2}$ to evaluate the likelihood.
 
 
-This is an incredible speed up for stan - rather than looping over $N$ datapoints we can loop over $J$ sets of sufficient statistics.
+This is an incredible speed up for stan - rather than looping over $N$ data points we can loop over $J$ sets of sufficient statistics.
 
 
 To move from the univariate to multivariate case we're going to reparametrise the problem to create a residual matrix and compute $\bar{\mathbf{x}}$ and $\hat{\Sigma}$
@@ -217,7 +249,7 @@ R = (Y_{j} \quad X^n_j)  -  (Z_{j} \quad X^e_{j}) \begin{pmatrix}
 \end{pmatrix} \\
 $$
 
-For simplicities sake let's rewrite this as:
+For simplicity's sake let's rewrite this as:
 
 $$
 R = (a - db)
@@ -238,7 +270,6 @@ I'm not sure this is the most elegant formulation but it was the easiest for me 
 
 Calculating $R'R$ (and the analogous  $\bar{R'}\bar{R}$) is just a matter of expanding out $(a' - b'd')(a-db)$:
 
-$$
 \begin{aligned}
 R'R &= a'a - 2a'db + b'd'db \\
 a'a &= \pmatrix{Y'Y \quad Y'X_n \\
@@ -249,8 +280,6 @@ a'd &= \pmatrix{Y'Z \quad Y'X_e \\
 d'd &= \pmatrix{Z'Z \quad Z'X_e \\
                 X'_eZ \quad X'_eX_e}
 \end{aligned}
-$$
-
 
 That's the last of the algebra - I promise. It's worth noting that the elements of each matrix are themselves block matrices, writing the sufficient statistics out in their most general format makes it easier to add multiple instruments and covariates later down the line.
 
@@ -280,15 +309,6 @@ create_betas <- function(J = 5){
 }
 ```
 
-
-
-
-<!-- ```{r} -->
-<!-- source("code/SS_functions.R") -->
-<!-- rstan_options(auto_write = TRUE) -->
-<!-- options(mc.cores = 4) -->
-
-<!-- ``` -->
 
 
 Now we're going to generate our $X, Z \text{ and } Y$ data:
@@ -391,15 +411,14 @@ fit_models <- function(sim_data, stan_model = hier_indep_model){
 Next up, is the stan model - one of the drawbacks of sufficient statistics is that stan models, which aren't particularly literate at the best of times, are a bit harder to follow:
 
 ```{r}
-# stan model here
-
+ writeLines(readLines("../code/iv_ss_hierarchical_indep_simple.stan"))
 ```
 
 
+I don't want to spend a huge amount of time on the stan model - the first function returns the log probability using our SSs and the second takes our equation coefficients and stacks them into a single matrix. The remaining lines are similar to a generic stan regression model apart from the data block which accepts sufficient statistics instead of actual data.
 
 
-
-Finally, we define an anonymous function to pull all of the above together; record some MCMC diagnostics such as split Rhat and finally, spit out a dataframe with model estimates. The last few lines perform the simulation.
+Finally, we define an anonymous function to pull all of the above together; record some MCMC diagnostics such as split Rhat and finally, spit out a dataframe with model estimates. The last few lines perform the simulation.^[These results actually use 83 draws due to the Rhat checks and accepting divergent transitions < 10 - this makes me slightly queasy but still not queasy enough to re-parametrise the model for this post. Also, we only use 100 draws since whilst the SSs speed model fitting up Harvard don't let pre-docs use computing clusters for their blog posts on GitHub Pages.]
 
 ```{r, eval = FALSE}
 
@@ -440,7 +459,7 @@ anon_func <- function(draw){
 
 # Set n core for stan
 options(mc.cores = 4)
-bhm_simmed_draws <- 1:1000 %>% 
+bhm_simmed_draws <- 1:100 %>% 
   map_dfr(anon_func)
 
 ```
@@ -449,11 +468,14 @@ bhm_simmed_draws <- 1:1000 %>%
 # Results
 
 
-```{r}
-bhm_simmed_draws <- read_csv("../../../../Dropbox-Ed/Ed/DMLD-BHM/data/output_data/model_draws/weak_iv_sim_draws.csv")
-
+```{r echo = FALSE}
+bhm_simmed_draws <- read_csv("../data/model_draws/weak_iv_sim_draws.csv")
 ```
 
+
+
+
+The results are pretty stark - when we consider just one draw it becomes clear the advantage a BHM offers in terms of both point estimates and a measure of our uncertainty:
 
 ```{r}
 bhm_simmed_draws %>% 
@@ -471,15 +493,14 @@ bhm_simmed_draws %>%
   theme_minimal() +
   scale_y_continuous(breaks = 1:18) +
   labs(subtitle = paste0("draw: ", 425),
-       title = "Weak IV: BHM vs Frequentist No Pooling")
+       title = "Weak IV: BHM vs Frequentist No Pooling",
+       caption = "BHM displays 95% credibility intervals and posterior median.")
 ```
 
+We're comparing credibility intervals with confidence intervals which is generally frowned upon - in my defence I feel like everyone does it secretly and both are meant to give a measure of uncertainty. What that uncertainty is will depend on you I guess.
 
 
-
-
-
-
+Comparing the mean squared error the BHM's strength becomes even more stark:
 ```{r}
 bhm_simmed_draws %>% 
   filter(n_rhat_issues == 0) %>%
@@ -490,6 +511,11 @@ bhm_simmed_draws %>%
   knitr::kable(digits = 4)
 ```
 
+I'm not sure why the fourth group has such a high MSE - it's possible that we simply got unlucky in one of the draws and a weak first stage cropped up in a group 4 draw.
+
+
+
+In this plot we're trying to create a rough measure of how large the confidence/credibility interval is relative to its point estimate - we just divide the interval width by the point estimate's absolute value.
 
 ```{r}
 
@@ -524,39 +550,18 @@ comp_plot_df_width %>%
 
 ```
 
+It seems like weak IV's crazy large confidence intervals are cropping up in the no pooling model giving us widths 10,000 times larger than their point estimates. On the other hand, the BHM tends to keep things calm with only one draw with a ratio of 100. 
 
 
-```{r}
-hist_error_sq <- bhm_simmed_draws %>% 
-  filter(n_rhat_issues == 0,
-         divergent < 10) %>% 
-  mutate(error = (true_term - estimate)^2) 
-
-hist_error_sq_subset <- hist_error_sq %>% 
-  select(-model)
-
-hist_error_sq %>% 
-  ggplot(aes(x = log10(error),
-             fill = model)) +
-  geom_histogram(data = hist_error_sq_subset,
-                 fill = "grey",
-                 bins = 45,
-                 size = 0.5) +
-  geom_histogram(colour = "black",
-                 bins = 45,
-                 size = 0.5) + 
-  facet_grid(j ~ model,
-             scales = "free_y") +
-  theme_bw()  +
-  labs(title = "Squared Error Draws Across Groups",
-       subtitle = "Log10 scale")
-
-```
-
+Finally, we can plot the density of the squared errors on log scale:
 
 ```{r}
 
 library(ggridges)
+hist_error_sq <- bhm_simmed_draws %>% 
+  filter(n_rhat_issues == 0,
+         divergent < 10) %>% 
+  mutate(error = (true_term - estimate)^2) 
 
 
 hist_error_sq %>% 
@@ -566,6 +571,17 @@ hist_error_sq %>%
   geom_density_ridges(alpha = 0.7,quantile_lines = TRUE,
                       quantiles = 2
                       ) +
-  theme_ridges()
+  theme_ridges() +
+  labs(title = "Squared Error Density Plots")
 ```
+
+# Conclusion
+
+We've seen how Bayesian hierarchical models offer a nice way to overcome weak instrument issues provided we can exploit information from stronger instruments. I'm a big fan of shrinking IV estimates in general - we know the that the IV estimator is biased and has relatively poor asympotic efficiency compared to its OLS cousin so adding priors and introducing shrinkage is pretty much a free lunch. We improve finite sample performance and in the limit the prior weight tends to 0 anyway.
+
+
+Chamberlain and Imbens actually had a fully Bayesian solution similar to ours in [1996](https://www.nber.org/papers/t0204) - so they only beat us by 23 years! The final, published, paper linked in the intro isn't fully Bayesian which is a shame - with stan this is pretty easy to do nowadays as we've seen.
+
+
+
 
