@@ -1,7 +1,4 @@
 ---
-title: "Goodman-Bacon Decomposition Package in R"
-author: "Ed Jee"
-date: "24/12/2019"
 output:
       html_document:
         code_folding: show
