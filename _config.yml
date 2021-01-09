@@ -1,13 +1,13 @@
 # Site settings
-title:          Econ Research Reproduced
-description:    "A site dedicated to re-exploring older papers in economics"
-url:            "https://edgongithub.github.io/"
+title:          Ed's Website
+description:    "A collection of econ blogposts"
+url:            "https://edjeeongithub.github.io/"
 
 # Author
 author:
   name:         Ed Jee
-  url:          https://edgongithub.github.io/
-  email:        e.m.jee@lse.ac.uk
+  url:          https://edjeeongithub.github.io/
+  email:        edjee@uchicago.edu
 
 # Build settings
 markdown:       kramdown
